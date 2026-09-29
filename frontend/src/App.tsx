@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/refs */
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
@@ -8,8 +10,11 @@ export default function App() {
     const socketRef = useRef<Socket | null>(null);
     const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
     const isHostRef = useRef<boolean>(false);
+    const dataChannelRef = useRef<Map<string, RTCDataChannel>>(new Map());
 
     const [roomId, setRoomId] = useState<string>('');
+    const [audioFile, setAudioFile] = useState<File | null>(null);
+    const [audioURL, setAudioURL] = useState<string | null>(null);
 
     const createRoom = () => {
         isHostRef.current = true;
@@ -29,6 +34,24 @@ export default function App() {
         }
     }
 
+    const sendAudioFile = async (): Promise<void> => {
+        if (!audioFile) {
+            console.log("No audio file selected!");
+            return;
+        }
+
+        const arrayBuffer = await audioFile.arrayBuffer();
+        peersRef.current.forEach((pc, guestId) => {
+            const dataChannel = dataChannelRef.current.get(guestId);
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(arrayBuffer);
+            }
+            else {
+                console.warn(`Cannot send audio: Data channel is currently ${dataChannel?.readyState}`)
+            }
+        })
+    }
+
     const createPeerConnection = (targetId: string): RTCPeerConnection => {
         const pc = new RTCPeerConnection({
             iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
@@ -36,14 +59,19 @@ export default function App() {
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
+                console.log("Found ICE candidate:", event.candidate)
                 socketRef.current?.emit('signal', {
                     targetId: targetId,
                     signalData: {
                         type: 'ice-candidate',
                         candidate: event.candidate
-                    } 
+                    }
                 })
             }
+        }
+
+        pc.oniceconnectionstatechange = () => {
+            console.log(`ICE Connection State for ${targetId}:`, pc.iceConnectionState);
         }
 
         pc.ondatachannel = (event) => {
@@ -51,7 +79,14 @@ export default function App() {
             console.log(`Guest caught the data channel from ${targetId}`)
 
             receiveChannel.onmessage = (messageEvent) => {
-                console.log('Received from host: ', messageEvent.data)
+                const blob = new Blob([messageEvent.data], {
+                    type: 'audio/mpeg'
+                });
+
+                const url = URL.createObjectURL(blob);
+                console.log('Generated audio URL: ', url);
+
+                setAudioURL(url);
             }
         }
 
@@ -65,8 +100,10 @@ export default function App() {
 
         const pc = createPeerConnection(guestSocketId);
 
-        const dataChannel = pc.createDataChannel('sync-channel');
+        //create the data channel and save to map
+        const dataChannel = pc.createDataChannel(`sync-channel-${guestSocketId}`);
         dataChannel.onopen = () => { console.log(`Data channel open with ${guestSocketId}`); };
+        dataChannelRef.current.set(guestSocketId, dataChannel);
 
         //create the SDP offer
         const offer = await pc.createOffer();
@@ -86,14 +123,6 @@ export default function App() {
     useEffect(() => {
         // connecting to our signaling server
         socketRef.current = io('http://localhost:3000');
-
-        // //connecting to WebRTC engine
-        // const config: RTCConfiguration = {
-        //     iceServers: [{
-        //         urls: 'stun:stun.l.google.com:19302'
-        //     }]
-        // }
-        // peersRef.current = new RTCPeerConnection(config);
 
         socketRef.current.on('connect', () => {
             console.log('Connected to signaling server! My ID:', socketRef.current?.id);
@@ -132,6 +161,7 @@ export default function App() {
             } else if (type === 'ice-candidate') {
                 const pc = peersRef.current.get(data.senderId);
                 if (pc) {
+                    console.log(`Received ICE Candidate from ${data.senderId}`);
                     pc.addIceCandidate(data.signalData.candidate);
                 }
             }
@@ -139,7 +169,7 @@ export default function App() {
 
         return () => {
             socketRef.current?.disconnect();
-            peersRef.current?.forEach((value)=>{
+            peersRef.current?.forEach((value) => {
                 value.close();
             })
         }
@@ -150,12 +180,31 @@ export default function App() {
         <div className='App-container'>
             <h1>P2P Sync App</h1>
 
-            <div className='create-party-container'>
+            <div className='host-container'>
                 <button onClick={createRoom}>Create Party (Host) </button>
                 {isHostRef.current && roomId && <p><strong>ROOM ID:</strong>{roomId}</p>}
+
+                {isHostRef.current && (
+                    <input
+                        className="file-picker"
+                        type="file"
+                        accept='audio/*'
+                        onChange={(e) => {
+                            if (e.target.files != null)
+                                setAudioFile(e.target.files[0])
+                        }}
+                    />
+                )}
+
+                <button
+                    className='send-audiobtn'
+                    onClick={sendAudioFile}
+                >
+                    Send Audio
+                </button>
             </div>
 
-            <div className='join-party-container'>
+            <div className='guest-container'>
                 <input
                     className='join-input'
                     type="text"
@@ -164,6 +213,14 @@ export default function App() {
                     onChange={(e) => setRoomId(e.target.value)}
                 />
                 <button className='join-button' onClick={joinRoom}>Join Party (Guest)</button>
+            </div>
+
+            <div className='audio-player'>
+                {audioURL && (
+                    <audio controls>
+                        <source src={audioURL} type="audio/mpeg" />
+                    </audio>
+                )}
             </div>
 
         </div>
