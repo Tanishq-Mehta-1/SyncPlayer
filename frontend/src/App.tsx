@@ -11,13 +11,17 @@ export default function App() {
     const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
     const isHostRef = useRef<boolean>(false);
     const dataChannelRef = useRef<Map<string, RTCDataChannel>>(new Map());
+    const pendingCandidatesRef = useRef<Map<string, RTCIceCandidate[]>>(new Map());
 
     const [roomId, setRoomId] = useState<string>('');
     const [audioFile, setAudioFile] = useState<File | null>(null);
     const [audioURL, setAudioURL] = useState<string | null>(null);
 
-    const createRoom = () => {
+    const createRoom = async () => {
         isHostRef.current = true;
+        
+        // temporary bypass to get datachannel working
+        await navigator.mediaDevices.getUserMedia({ audio: true });
 
         const newRoomId = Math.random().toString(36).substring(2, 8);
         setRoomId(newRoomId);
@@ -25,8 +29,11 @@ export default function App() {
         console.log(`Created and joined room: ${newRoomId}`);
     };
 
-    const joinRoom = () => {
+    const joinRoom = async () => {
         isHostRef.current = false;
+        
+        // temporary bypass to get datachannel working
+        await navigator.mediaDevices.getUserMedia({ audio: true });
 
         if (roomId.trim() !== '') {
             socketRef.current?.emit('join-room', roomId);
@@ -57,21 +64,26 @@ export default function App() {
             iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
         });
 
+        pc.oniceconnectionstatechange = () => {
+            console.log(`ICE Connection State for ${targetId}:`, pc.iceConnectionState);
+        }
+
+        pc.onconnectionstatechange = () => {
+            console.log(`Global Connection State for ${targetId}:`, pc.connectionState);
+        }
+
         pc.onicecandidate = (event) => {
             if (event.candidate) {
                 console.log("Found ICE candidate:", event.candidate)
+
                 socketRef.current?.emit('signal', {
                     targetId: targetId,
                     signalData: {
                         type: 'ice-candidate',
-                        candidate: event.candidate
+                        candidate: event.candidate.toJSON()
                     }
                 })
             }
-        }
-
-        pc.oniceconnectionstatechange = () => {
-            console.log(`ICE Connection State for ${targetId}:`, pc.iceConnectionState);
         }
 
         pc.ondatachannel = (event) => {
@@ -102,7 +114,9 @@ export default function App() {
 
         //create the data channel and save to map
         const dataChannel = pc.createDataChannel(`sync-channel-${guestSocketId}`);
-        dataChannel.onopen = () => { console.log(`Data channel open with ${guestSocketId}`); };
+        dataChannel.onopen = () => {
+            console.log(`Data channel open with ${guestSocketId}`);
+        };
         dataChannelRef.current.set(guestSocketId, dataChannel);
 
         //create the SDP offer
@@ -137,6 +151,7 @@ export default function App() {
 
         socketRef.current.on('signal', async (data: { senderId: string, signalData: any }) => {
             const { type, sdp } = data.signalData;
+
             if (type === 'offer') {
                 const pc = createPeerConnection(data.senderId);
 
@@ -152,17 +167,62 @@ export default function App() {
                     }
                 })
                 console.log('Guest: Received Offer, send Answer back')
+
+                if (pendingCandidatesRef.current.has(data.senderId)) {
+                    for (const candidate of pendingCandidatesRef.current.get(data.senderId)!) {
+                        try {
+                            await pc.addIceCandidate(candidate);
+                            console.log('Ice candidated added successfully')
+                        } catch (error) {
+                            console.error('Error adding queued ICE candidate', error);
+                        }
+                    }
+                    pendingCandidatesRef.current.set(data.senderId, []);
+                }
             } else if (type === 'answer') {
+
                 const pc = peersRef.current.get(data.senderId);
                 if (pc) {
                     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
                     console.log('Host: Received Answer, handshake complete')
+
+                    if (pendingCandidatesRef.current.has(data.senderId)) {
+                        for (const candidate of pendingCandidatesRef.current.get(data.senderId)!) {
+                            try {
+                                await pc.addIceCandidate(candidate);
+                                console.log('Ice candidated added successfully')
+                            } catch (error) {
+                                console.error('Error adding queued ICE candidate', error);
+                            }
+                        }
+                        pendingCandidatesRef.current.set(data.senderId, []);
+                    }
                 }
             } else if (type === 'ice-candidate') {
+
                 const pc = peersRef.current.get(data.senderId);
+
                 if (pc) {
+
+                    const iceCandidate = new RTCIceCandidate(data.signalData.candidate);
                     console.log(`Received ICE Candidate from ${data.senderId}`);
-                    pc.addIceCandidate(data.signalData.candidate);
+
+                    if (pc.remoteDescription) {
+                        await pc.addIceCandidate(iceCandidate);
+                        console.log('Ice candidated added successfully')
+
+                    } else {
+
+                        if (!pendingCandidatesRef.current.has(data.senderId)) {
+                            pendingCandidatesRef.current.set(data.senderId, []);
+                        }
+
+                        pendingCandidatesRef.current
+                            .get(data.senderId)!
+                            .push(iceCandidate);
+
+                        console.log('Ice candidated queued')
+                    }
                 }
             }
         })
