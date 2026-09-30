@@ -20,7 +20,7 @@ export default function App() {
         isHostRef.current = true;
 
         // temporary bypass to get datachannel working
-        await navigator.mediaDevices.getUserMedia({ audio: true });
+        // await navigator.mediaDevices.getUserMedia({ audio: true });
 
         const newRoomId = Math.random().toString(36).substring(2, 8);
         setRoomId(newRoomId);
@@ -32,7 +32,7 @@ export default function App() {
         isHostRef.current = false;
 
         // temporary bypass to get datachannel working
-        await navigator.mediaDevices.getUserMedia({ audio: true });
+        // await navigator.mediaDevices.getUserMedia({ audio: true });
 
         if (roomId.trim() !== '') {
             socketRef.current?.emit('join-room', roomId);
@@ -47,24 +47,50 @@ export default function App() {
         }
 
         const arrayBuffer = await audioFile.arrayBuffer();
+        const CHUNK_SIZE = 16384; // 16KB
+        const MAX_BUFFER = 65535; //64KB 
+
         peersRef.current.forEach((pc, guestId) => {
             const dataChannel = dataChannelRef.current.get(guestId);
-            if (dataChannel && dataChannel.readyState === 'open') {
-                dataChannel.send(arrayBuffer);
+            if (!dataChannel || dataChannel.readyState !== 'open') {
+                return;
             }
-            else {
-                console.warn(`Cannot send audio: Data channel is currently ${dataChannel?.readyState}`)
+            let offset: number = 0;
+
+            const sendNextBatch = () => {
+                while (offset < arrayBuffer.byteLength) {
+
+                    if (dataChannel.bufferedAmount >= MAX_BUFFER)
+                        break;
+
+                    const chunk = arrayBuffer.slice(offset, offset + CHUNK_SIZE);
+                    dataChannel.send(chunk);
+                    offset += CHUNK_SIZE;
+                }
+
+                if (offset >= arrayBuffer.byteLength) {
+                    dataChannel.send("EOF");
+                    console.log("Audio file sent");
+                }
+
             }
+
+            dataChannel.onbufferedamountlow = () => {
+                if (offset < arrayBuffer.byteLength)
+                    sendNextBatch();
+            }
+
+            sendNextBatch();
         })
     }
 
     const createPeerConnection = (targetId: string): RTCPeerConnection => {
-       
+
         const username = import.meta.env.VITE_TURN_USERNAME;
         const password = import.meta.env.VITE_TURN_PASSWORD;
 
         const pc = new RTCPeerConnection({
-            iceServers : [{
+            iceServers: [{
                 urls: 'stun:stun.l.google.com:19302'
             },
             {
@@ -119,15 +145,23 @@ export default function App() {
             const receiveChannel = event.channel;
             console.log(`Guest caught the data channel from ${targetId}`)
 
+            let receiveBuffer: any[] = [];
+
             receiveChannel.onmessage = (messageEvent) => {
-                const blob = new Blob([messageEvent.data], {
-                    type: 'audio/mpeg'
-                });
+                if (messageEvent.data === "EOF") {
 
-                const url = URL.createObjectURL(blob);
-                console.log('Generated audio URL: ', url);
+                    const blob = new Blob(receiveBuffer, {
+                        type: 'audio/mpeg'
+                    });
 
-                setAudioURL(url);
+                    const url = URL.createObjectURL(blob);
+                    console.log('Generated audio URL: ', url);
+
+                    setAudioURL(url);
+
+                    receiveBuffer = [];
+                } else
+                    receiveBuffer.push(messageEvent.data);
             }
         }
 
@@ -306,7 +340,7 @@ export default function App() {
 
             <div className='audio-player'>
                 {audioURL && (
-                    <audio controls>
+                    <audio controls key={audioURL}>
                         <source src={audioURL} type="audio/mpeg" />
                     </audio>
                 )}
