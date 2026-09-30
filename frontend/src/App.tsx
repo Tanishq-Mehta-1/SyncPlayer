@@ -11,6 +11,7 @@ export default function App() {
     const isHostRef = useRef<boolean>(false);
     const dataChannelRef = useRef<Map<string, RTCDataChannel>>(new Map());
     const pendingCandidatesRef = useRef<Map<string, RTCIceCandidate[]>>(new Map());
+    const audioRef = useRef<HTMLAudioElement>(null);
 
     const [roomId, setRoomId] = useState<string>('');
     const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -40,11 +41,23 @@ export default function App() {
         }
     }
 
+    const broadcastCommand = (type: string, time: number) => {
+        peersRef.current.forEach((pc, guestId) => {
+            const dc = dataChannelRef.current.get(guestId);
+            if (dc && dc.readyState === 'open') {
+                dc.send(JSON.stringify({ type, time }));
+                console.log(`Command : ${{type, time}} sent to ${guestId}`);
+            }
+        });
+    }
+
     const sendAudioFile = async (): Promise<void> => {
         if (!audioFile) {
             console.log("No audio file selected!");
             return;
         }
+
+        generateAudioURLFile(audioFile);
 
         const arrayBuffer = await audioFile.arrayBuffer();
         const CHUNK_SIZE = 16384; // 16KB
@@ -84,6 +97,30 @@ export default function App() {
         })
     }
 
+    const generateAudioURLBuffer = (buffer: any[]): void => {
+
+        const blob = new Blob(buffer, {
+            type: 'audio/mpeg'
+        });
+
+        const url = URL.createObjectURL(blob);
+        console.log('Generated audio URL: ', url);
+
+        setAudioURL(url);
+    }
+
+    const generateAudioURLFile = (file: File): void => {
+
+        const blob = new Blob([file], {
+            type: 'audio/mpeg'
+        });
+
+        const url = URL.createObjectURL(blob);
+        console.log('Generated audio URL: ', url);
+
+        setAudioURL(url);
+    }
+
     const createPeerConnection = (targetId: string): RTCPeerConnection => {
 
         const username = import.meta.env.VITE_TURN_USERNAME;
@@ -119,13 +156,13 @@ export default function App() {
             ]
         });
 
-        pc.oniceconnectionstatechange = () => {
-            console.log(`ICE Connection State for ${targetId}:`, pc.iceConnectionState);
-        }
+        // pc.oniceconnectionstatechange = () => {
+        //     console.log(`ICE Connection State for ${targetId}:`, pc.iceConnectionState);
+        // }
 
-        pc.onconnectionstatechange = () => {
-            console.log(`Global Connection State for ${targetId}:`, pc.connectionState);
-        }
+        // pc.onconnectionstatechange = () => {
+        //     console.log(`Global Connection State for ${targetId}:`, pc.connectionState);
+        // }
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
@@ -148,20 +185,27 @@ export default function App() {
             let receiveBuffer: any[] = [];
 
             receiveChannel.onmessage = (messageEvent) => {
-                if (messageEvent.data === "EOF") {
 
-                    const blob = new Blob(receiveBuffer, {
-                        type: 'audio/mpeg'
-                    });
-
-                    const url = URL.createObjectURL(blob);
-                    console.log('Generated audio URL: ', url);
-
-                    setAudioURL(url);
-
-                    receiveBuffer = [];
-                } else
+                if (typeof messageEvent.data === 'string') {
+                    if (messageEvent.data === "EOF") {
+                        generateAudioURLBuffer(receiveBuffer);
+                        
+                        receiveBuffer = [];
+                    } else {
+                        const command = JSON.parse(messageEvent.data);
+                        if (!audioRef.current) return;
+                        
+                        console.log("Received data: ", messageEvent.data);
+                        audioRef.current.currentTime = command.time;
+                        if (command.type === "PLAY") {
+                            audioRef.current.play();
+                        } else if (command.type === "PAUSE") {
+                            audioRef.current.pause();
+                        }
+                    }
+                } else {
                     receiveBuffer.push(messageEvent.data);
+                }
             }
         }
 
@@ -340,9 +384,14 @@ export default function App() {
 
             <div className='audio-player'>
                 {audioURL && (
-                    <audio controls key={audioURL}>
-                        <source src={audioURL} type="audio/mpeg" />
-                    </audio>
+                    <audio
+                        controls
+                        src={audioURL}
+                        ref={!isHostRef.current ? audioRef : null}
+                        onPlay={(e) => broadcastCommand("PLAY", e.currentTarget.currentTime)}
+                        onPause={(e) => broadcastCommand("PAUSE", e.currentTarget.currentTime)}
+                        onSeeked={(e) => broadcastCommand('PLAY', e.currentTarget.currentTime)}
+                    />
                 )}
             </div>
 
