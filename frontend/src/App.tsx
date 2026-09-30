@@ -2,7 +2,6 @@
 /* eslint-disable react-hooks/refs */
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-
 import './App.css'
 
 export default function App() {
@@ -19,7 +18,7 @@ export default function App() {
 
     const createRoom = async () => {
         isHostRef.current = true;
-        
+
         // temporary bypass to get datachannel working
         await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -31,7 +30,7 @@ export default function App() {
 
     const joinRoom = async () => {
         isHostRef.current = false;
-        
+
         // temporary bypass to get datachannel working
         await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -60,8 +59,38 @@ export default function App() {
     }
 
     const createPeerConnection = (targetId: string): RTCPeerConnection => {
+       
+        const username = import.meta.env.VITE_TURN_USERNAME;
+        const password = import.meta.env.VITE_TURN_PASSWORD;
+
         const pc = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            iceServers : [{
+                urls: 'stun:stun.l.google.com:19302'
+            },
+            {
+                urls: "stun:stun.relay.metered.ca:80",
+            },
+            {
+                urls: "turn:global.relay.metered.ca:80",
+                username: username,
+                credential: password,
+            },
+            {
+                urls: "turn:global.relay.metered.ca:80?transport=tcp",
+                username: username,
+                credential: password,
+            },
+            {
+                urls: "turn:global.relay.metered.ca:443",
+                username: username,
+                credential: password,
+            },
+            {
+                urls: "turns:global.relay.metered.ca:443?transport=tcp",
+                username: username,
+                credential: password,
+            },
+            ]
         });
 
         pc.oniceconnectionstatechange = () => {
