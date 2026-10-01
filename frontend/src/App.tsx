@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import './App.css'
+import { arrayBuffer } from 'stream/consumers';
 
 export default function App() {
 
@@ -45,10 +46,51 @@ export default function App() {
         peersRef.current.forEach((pc, guestId) => {
             const dc = dataChannelRef.current.get(guestId);
             if (dc && dc.readyState === 'open') {
-                dc.send(JSON.stringify({ type, time }));
-                console.log(`Command : ${{type, time}} sent to ${guestId}`);
+                dc.send(JSON.stringify({
+                    type,
+                    time,
+                    timestamp: Date.now()
+                }));
+                // console.log('Command : '${{ type, time }} sent to ${guestId}`);
             }
         });
+    }
+
+    const sendFileToGuest = async (guestId: string, arrayBuffer: ArrayBuffer) => {
+        
+        const dc = dataChannelRef.current.get(guestId);
+        if (!dc || dc.readyState !== 'open') return;
+
+        const CHUNK_SIZE = 16384; // 16KB
+        const MAX_BUFFER = 65535; //64KB 
+
+        let offset: number = 0;
+
+        const sendNextBatch = () => {
+            while (offset < arrayBuffer.byteLength) {
+
+                if (dc.bufferedAmount >= MAX_BUFFER)
+                    break;
+
+                const chunk = arrayBuffer.slice(offset, offset + CHUNK_SIZE);
+                dc.send(chunk);
+                offset += CHUNK_SIZE;
+            }
+
+            if (offset >= arrayBuffer.byteLength) {
+                dc.send("EOF");
+                console.log("Audio file sent");
+            }
+
+        }
+
+        dc.onbufferedamountlow = () => {
+            if (offset < arrayBuffer.byteLength)
+                sendNextBatch();
+        }
+
+        sendNextBatch();
+
     }
 
     const sendAudioFile = async (): Promise<void> => {
@@ -60,10 +102,11 @@ export default function App() {
         generateAudioURLFile(audioFile);
 
         const arrayBuffer = await audioFile.arrayBuffer();
-        const CHUNK_SIZE = 16384; // 16KB
-        const MAX_BUFFER = 65535; //64KB 
+        // const CHUNK_SIZE = 16384; // 16KB
+        // const MAX_BUFFER = 65535; //64KB 
 
         peersRef.current.forEach((pc, guestId) => {
+            sendFileToGuest(guestId, arrayBuffer);
             const dataChannel = dataChannelRef.current.get(guestId);
             if (!dataChannel || dataChannel.readyState !== 'open') {
                 return;
@@ -187,21 +230,27 @@ export default function App() {
             receiveChannel.onmessage = (messageEvent) => {
 
                 if (typeof messageEvent.data === 'string') {
+
                     if (messageEvent.data === "EOF") {
+
                         generateAudioURLBuffer(receiveBuffer);
-                        
                         receiveBuffer = [];
+
                     } else {
+
                         const command = JSON.parse(messageEvent.data);
                         if (!audioRef.current) return;
-                        
-                        console.log("Received data: ", messageEvent.data);
-                        audioRef.current.currentTime = command.time;
+
+
+                        const delay = (Date.now() - command.timestamp) / 1000;
+                        audioRef.current.currentTime = command.time + delay;
+
                         if (command.type === "PLAY") {
                             audioRef.current.play();
                         } else if (command.type === "PAUSE") {
                             audioRef.current.pause();
                         }
+                        console.log("Received data: ", messageEvent.data);
                     }
                 } else {
                     receiveBuffer.push(messageEvent.data);
@@ -349,7 +398,7 @@ export default function App() {
 
             <div className='host-container'>
                 <button onClick={createRoom}>Create Party (Host) </button>
-                {isHostRef.current && roomId && <p><strong>ROOM ID:</strong>{roomId}</p>}
+                {isHostRef.current && roomId && <p><strong>ROOM ID: </strong>{roomId}</p>}
 
                 {isHostRef.current && (
                     <input
@@ -387,10 +436,10 @@ export default function App() {
                     <audio
                         controls
                         src={audioURL}
-                        ref={!isHostRef.current ? audioRef : null}
+                        ref={audioRef}
                         onPlay={(e) => broadcastCommand("PLAY", e.currentTarget.currentTime)}
                         onPause={(e) => broadcastCommand("PAUSE", e.currentTarget.currentTime)}
-                        onSeeked={(e) => broadcastCommand('PLAY', e.currentTarget.currentTime)}
+                        onSeeked={(e) => broadcastCommand('SEEK', e.currentTarget.currentTime)}
                     />
                 )}
             </div>
