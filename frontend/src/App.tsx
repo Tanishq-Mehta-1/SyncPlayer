@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import './App.css'
-import { arrayBuffer } from 'stream/consumers';
 
 export default function App() {
 
@@ -13,6 +12,7 @@ export default function App() {
     const dataChannelRef = useRef<Map<string, RTCDataChannel>>(new Map());
     const pendingCandidatesRef = useRef<Map<string, RTCIceCandidate[]>>(new Map());
     const audioRef = useRef<HTMLAudioElement>(null);
+    const audioFileRef = useRef<File | null>(null);
 
     const [roomId, setRoomId] = useState<string>('');
     const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -42,22 +42,30 @@ export default function App() {
         }
     }
 
-    const broadcastCommand = (type: string, time: number) => {
+    const broadcastCommand = (type: string, time: number, isPlaying?: boolean) => {
         peersRef.current.forEach((pc, guestId) => {
             const dc = dataChannelRef.current.get(guestId);
             if (dc && dc.readyState === 'open') {
-                dc.send(JSON.stringify({
-                    type,
-                    time,
-                    timestamp: Date.now()
-                }));
+                if (isPlaying) {
+                    dc.send(JSON.stringify({
+                        type,
+                        time,
+                        isPlaying,
+                        timestamp: Date.now()
+                    }));
+                } else
+                    dc.send(JSON.stringify({
+                        type,
+                        time,
+                        timestamp: Date.now()
+                    }));
                 // console.log('Command : '${{ type, time }} sent to ${guestId}`);
             }
         });
     }
 
     const sendFileToGuest = async (guestId: string, arrayBuffer: ArrayBuffer) => {
-        
+
         const dc = dataChannelRef.current.get(guestId);
         if (!dc || dc.readyState !== 'open') return;
 
@@ -102,41 +110,8 @@ export default function App() {
         generateAudioURLFile(audioFile);
 
         const arrayBuffer = await audioFile.arrayBuffer();
-        // const CHUNK_SIZE = 16384; // 16KB
-        // const MAX_BUFFER = 65535; //64KB 
-
         peersRef.current.forEach((pc, guestId) => {
             sendFileToGuest(guestId, arrayBuffer);
-            const dataChannel = dataChannelRef.current.get(guestId);
-            if (!dataChannel || dataChannel.readyState !== 'open') {
-                return;
-            }
-            let offset: number = 0;
-
-            const sendNextBatch = () => {
-                while (offset < arrayBuffer.byteLength) {
-
-                    if (dataChannel.bufferedAmount >= MAX_BUFFER)
-                        break;
-
-                    const chunk = arrayBuffer.slice(offset, offset + CHUNK_SIZE);
-                    dataChannel.send(chunk);
-                    offset += CHUNK_SIZE;
-                }
-
-                if (offset >= arrayBuffer.byteLength) {
-                    dataChannel.send("EOF");
-                    console.log("Audio file sent");
-                }
-
-            }
-
-            dataChannel.onbufferedamountlow = () => {
-                if (offset < arrayBuffer.byteLength)
-                    sendNextBatch();
-            }
-
-            sendNextBatch();
         })
     }
 
@@ -242,13 +217,29 @@ export default function App() {
                         if (!audioRef.current) return;
 
 
-                        const delay = (Date.now() - command.timestamp) / 1000;
-                        audioRef.current.currentTime = command.time + delay;
+                        // const delay = (Date.now() - command.timestamp) / 1000;
+                        const targetTime = command.time;
+                        if (command.type === "SYNC") {
+                            const drift = Math.abs(audioRef.current.currentTime - targetTime);
 
-                        if (command.type === "PLAY") {
-                            audioRef.current.play();
-                        } else if (command.type === "PAUSE") {
-                            audioRef.current.pause();
+                            if (drift > 0.5) {
+                                console.log(`Correcting major drift of ${drift.toFixed(3)}s`);
+                                audioRef.current.currentTime = targetTime;
+                            }
+                            if (command.isPlaying && audioRef.current.paused) {
+                                audioRef.current.play();
+                            } else if (!command.isPlaying && !audioRef.current.paused) {
+                                audioRef.current.pause();
+                            }
+                        } else {
+
+                            audioRef.current.currentTime = targetTime;
+
+                            if (command.type === "PAUSE") {
+                                audioRef.current.pause();
+                            } else if (command.type === "PLAY") {
+                                audioRef.current.play();
+                            }
                         }
                         console.log("Received data: ", messageEvent.data);
                     }
@@ -270,9 +261,15 @@ export default function App() {
 
         //create the data channel and save to map
         const dataChannel = pc.createDataChannel(`sync-channel-${guestSocketId}`);
-        dataChannel.onopen = () => {
+        dataChannel.onopen = async () => {
             console.log(`Data channel open with ${guestSocketId}`);
+
+            if (audioFileRef.current != null) {
+                const arrayBuffer = await audioFileRef.current.arrayBuffer();
+                sendFileToGuest(guestSocketId, arrayBuffer)
+            }
         };
+
         dataChannelRef.current.set(guestSocketId, dataChannel);
 
         //create the SDP offer
@@ -392,6 +389,16 @@ export default function App() {
 
     }, []) //only runs once
 
+    useEffect(() => {
+        const syncBroadcast = setInterval(() => {
+            if (isHostRef.current && audioRef.current) {
+                console.log("Host is broadcasting SYNC...");
+                broadcastCommand('SYNC', audioRef.current.currentTime, !audioRef.current.paused);
+            }
+        }, 2000);
+
+        return () => clearInterval(syncBroadcast);
+    }, []);
     return (
         <div className='App-container'>
             <h1>P2P Sync App</h1>
@@ -406,8 +413,10 @@ export default function App() {
                         type="file"
                         accept='audio/*'
                         onChange={(e) => {
-                            if (e.target.files != null)
+                            if (e.target.files != null){
                                 setAudioFile(e.target.files[0])
+                                audioFileRef.current = e.target.files[0];
+                            }
                         }}
                     />
                 )}
@@ -434,7 +443,7 @@ export default function App() {
             <div className='audio-player'>
                 {audioURL && (
                     <audio
-                        controls
+                        controls={isHostRef.current}
                         src={audioURL}
                         ref={audioRef}
                         onPlay={(e) => broadcastCommand("PLAY", e.currentTarget.currentTime)}
