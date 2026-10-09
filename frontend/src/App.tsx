@@ -2,7 +2,10 @@
 /* eslint-disable react-hooks/refs */
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import './App.css'
+import { HostControls } from './components/HostControls';
+import { GuestControls } from './components/GuestControls';
+import { SyncPlayer } from './components/SyncPlayer';
+import './App.css';
 
 export default function App() {
 
@@ -21,9 +24,6 @@ export default function App() {
     const createRoom = async () => {
         isHostRef.current = true;
 
-        // temporary bypass to get datachannel working
-        // await navigator.mediaDevices.getUserMedia({ audio: true });
-
         const newRoomId = Math.random().toString(36).substring(2, 8);
         setRoomId(newRoomId);
         socketRef.current?.emit('join-room', newRoomId);
@@ -32,9 +32,6 @@ export default function App() {
 
     const joinRoom = async () => {
         isHostRef.current = false;
-
-        // temporary bypass to get datachannel working
-        // await navigator.mediaDevices.getUserMedia({ audio: true });
 
         if (roomId.trim() !== '') {
             socketRef.current?.emit('join-room', roomId);
@@ -53,30 +50,28 @@ export default function App() {
                         isPlaying,
                         timestamp: Date.now()
                     }));
-                } else
+                } else {
                     dc.send(JSON.stringify({
                         type,
                         time,
                         timestamp: Date.now()
                     }));
-                // console.log('Command : '${{ type, time }} sent to ${guestId}`);
+                }
             }
         });
     }
 
     const sendFileToGuest = async (guestId: string, arrayBuffer: ArrayBuffer) => {
-
         const dc = dataChannelRef.current.get(guestId);
         if (!dc || dc.readyState !== 'open') return;
 
-        const CHUNK_SIZE = 16384; // 16KB
-        const MAX_BUFFER = 65535; //64KB 
+        const CHUNK_SIZE = 16384;
+        const MAX_BUFFER = 65535;
 
         let offset: number = 0;
 
         const sendNextBatch = () => {
             while (offset < arrayBuffer.byteLength) {
-
                 if (dc.bufferedAmount >= MAX_BUFFER)
                     break;
 
@@ -89,7 +84,6 @@ export default function App() {
                 dc.send("EOF");
                 console.log("Audio file sent");
             }
-
         }
 
         dc.onbufferedamountlow = () => {
@@ -98,7 +92,6 @@ export default function App() {
         }
 
         sendNextBatch();
-
     }
 
     const sendAudioFile = async (): Promise<void> => {
@@ -110,13 +103,13 @@ export default function App() {
         generateAudioURLFile(audioFile);
 
         const arrayBuffer = await audioFile.arrayBuffer();
+
         peersRef.current.forEach((pc, guestId) => {
             sendFileToGuest(guestId, arrayBuffer);
         })
     }
 
     const generateAudioURLBuffer = (buffer: any[]): void => {
-
         const blob = new Blob(buffer, {
             type: 'audio/mpeg'
         });
@@ -128,7 +121,6 @@ export default function App() {
     }
 
     const generateAudioURLFile = (file: File): void => {
-
         const blob = new Blob([file], {
             type: 'audio/mpeg'
         });
@@ -140,7 +132,6 @@ export default function App() {
     }
 
     const createPeerConnection = (targetId: string): RTCPeerConnection => {
-
         const username = import.meta.env.VITE_TURN_USERNAME;
         const password = import.meta.env.VITE_TURN_PASSWORD;
 
@@ -174,14 +165,6 @@ export default function App() {
             ]
         });
 
-        // pc.oniceconnectionstatechange = () => {
-        //     console.log(`ICE Connection State for ${targetId}:`, pc.iceConnectionState);
-        // }
-
-        // pc.onconnectionstatechange = () => {
-        //     console.log(`Global Connection State for ${targetId}:`, pc.connectionState);
-        // }
-
         pc.onicecandidate = (event) => {
             if (event.candidate) {
                 console.log("Found ICE candidate:", event.candidate)
@@ -203,36 +186,35 @@ export default function App() {
             let receiveBuffer: any[] = [];
 
             receiveChannel.onmessage = (messageEvent) => {
-
                 if (typeof messageEvent.data === 'string') {
-
                     if (messageEvent.data === "EOF") {
-
                         generateAudioURLBuffer(receiveBuffer);
                         receiveBuffer = [];
-
                     } else {
 
-                        const command = JSON.parse(messageEvent.data);
                         if (!audioRef.current) return;
 
+                        if (audioRef.current.readyState === 0) return;
 
-                        // const delay = (Date.now() - command.timestamp) / 1000;
-                        const targetTime = command.time;
+                        const command = JSON.parse(messageEvent.data);
+
+                        const delay = Math.max(0, (Date.now() - command.timestamp) / 1000);
+                        const targetTime = command.time + delay;
+
                         if (command.type === "SYNC") {
                             const drift = Math.abs(audioRef.current.currentTime - targetTime);
 
-                            if (drift > 0.5) {
-                                console.log(`Correcting major drift of ${drift.toFixed(3)}s`);
+                            if (drift > 0.05) {
                                 audioRef.current.currentTime = targetTime;
                             }
+
                             if (command.isPlaying && audioRef.current.paused) {
                                 audioRef.current.play();
                             } else if (!command.isPlaying && !audioRef.current.paused) {
                                 audioRef.current.pause();
                             }
-                        } else {
 
+                        } else {
                             audioRef.current.currentTime = targetTime;
 
                             if (command.type === "PAUSE") {
@@ -241,7 +223,6 @@ export default function App() {
                                 audioRef.current.play();
                             }
                         }
-                        console.log("Received data: ", messageEvent.data);
                     }
                 } else {
                     receiveBuffer.push(messageEvent.data);
@@ -259,7 +240,6 @@ export default function App() {
 
         const pc = createPeerConnection(guestSocketId);
 
-        //create the data channel and save to map
         const dataChannel = pc.createDataChannel(`sync-channel-${guestSocketId}`);
         dataChannel.onopen = async () => {
             console.log(`Data channel open with ${guestSocketId}`);
@@ -272,7 +252,6 @@ export default function App() {
 
         dataChannelRef.current.set(guestSocketId, dataChannel);
 
-        //create the SDP offer
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
@@ -288,7 +267,6 @@ export default function App() {
     }
 
     useEffect(() => {
-        // connecting to our signaling server
         socketRef.current = io('http://localhost:3000');
 
         socketRef.current.on('connect', () => {
@@ -333,7 +311,6 @@ export default function App() {
                     pendingCandidatesRef.current.set(data.senderId, []);
                 }
             } else if (type === 'answer') {
-
                 const pc = peersRef.current.get(data.senderId);
                 if (pc) {
                     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -352,20 +329,16 @@ export default function App() {
                     }
                 }
             } else if (type === 'ice-candidate') {
-
                 const pc = peersRef.current.get(data.senderId);
 
                 if (pc) {
-
                     const iceCandidate = new RTCIceCandidate(data.signalData.candidate);
                     console.log(`Received ICE Candidate from ${data.senderId}`);
 
                     if (pc.remoteDescription) {
                         await pc.addIceCandidate(iceCandidate);
                         console.log('Ice candidated added successfully')
-
                     } else {
-
                         if (!pendingCandidatesRef.current.has(data.senderId)) {
                             pendingCandidatesRef.current.set(data.senderId, []);
                         }
@@ -386,8 +359,7 @@ export default function App() {
                 value.close();
             })
         }
-
-    }, []) //only runs once
+    }, [])
 
     useEffect(() => {
         const syncBroadcast = setInterval(() => {
@@ -399,61 +371,35 @@ export default function App() {
 
         return () => clearInterval(syncBroadcast);
     }, []);
+
+    const handleFileSelect = (file: File) => {
+        setAudioFile(file);
+        audioFileRef.current = file;
+    };
+
     return (
         <div className='App-container'>
             <h1>P2P Sync App</h1>
 
-            <div className='host-container'>
-                <button onClick={createRoom}>Create Party (Host) </button>
-                {isHostRef.current && roomId && <p><strong>ROOM ID: </strong>{roomId}</p>}
+            <HostControls
+                isHost={isHostRef.current}
+                roomId={roomId}
+                createRoom={createRoom}
+                onFileSelect={handleFileSelect}
+                sendAudioFile={sendAudioFile}
+            />
 
-                {isHostRef.current && (
-                    <input
-                        className="file-picker"
-                        type="file"
-                        accept='audio/*'
-                        onChange={(e) => {
-                            if (e.target.files != null){
-                                setAudioFile(e.target.files[0])
-                                audioFileRef.current = e.target.files[0];
-                            }
-                        }}
-                    />
-                )}
+            <GuestControls
+                roomId={roomId}
+                setRoomId={setRoomId}
+                joinRoom={joinRoom}
+            />
 
-                <button
-                    className='send-audiobtn'
-                    onClick={sendAudioFile}
-                >
-                    Send Audio
-                </button>
-            </div>
-
-            <div className='guest-container'>
-                <input
-                    className='join-input'
-                    type="text"
-                    placeholder='Enter Room ID'
-                    value={roomId}
-                    onChange={(e) => setRoomId(e.target.value)}
-                />
-                <button className='join-button' onClick={joinRoom}>Join Party (Guest)</button>
-            </div>
-
-            <div className='audio-player'>
-                {audioURL && (
-                    <audio
-                        controls={isHostRef.current}
-                        src={audioURL}
-                        ref={audioRef}
-                        onPlay={(e) => broadcastCommand("PLAY", e.currentTarget.currentTime)}
-                        onPause={(e) => broadcastCommand("PAUSE", e.currentTarget.currentTime)}
-                        onSeeked={(e) => broadcastCommand('SEEK', e.currentTarget.currentTime)}
-                    />
-                )}
-            </div>
-
+            <SyncPlayer
+                audioURL={audioURL}
+                audioRef={audioRef}
+                broadcastCommand={broadcastCommand}
+            />
         </div>
     )
 }
-
