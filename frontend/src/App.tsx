@@ -138,36 +138,14 @@ export default function App() {
 
     const createPeerConnection = (targetId: string): RTCPeerConnection => {
 
-        const username = import.meta.env.VITE_TURN_USERNAME;
-        const password = import.meta.env.VITE_TURN_PASSWORD;
+        // const username = import.meta.env.VITE_TURN_USERNAME;
+        // const password = import.meta.env.VITE_TURN_PASSWORD;
 
         const pc = new RTCPeerConnection({
-            iceServers: [{
-                urls: 'stun:stun.l.google.com:19302'
-            },
-            {
-                urls: "stun:stun.relay.metered.ca:80",
-            },
-            {
-                urls: "turn:global.relay.metered.ca:80",
-                username: username,
-                credential: password,
-            },
-            {
-                urls: "turn:global.relay.metered.ca:80?transport=tcp",
-                username: username,
-                credential: password,
-            },
-            {
-                urls: "turn:global.relay.metered.ca:443",
-                username: username,
-                credential: password,
-            },
-            {
-                urls: "turns:global.relay.metered.ca:443?transport=tcp",
-                username: username,
-                credential: password,
-            },
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
             ]
         });
 
@@ -248,7 +226,7 @@ export default function App() {
                             }
 
                         } else {
-                            
+
                             // Explicit Commands (PLAY, PAUSE, SEEK)
                             audioRef.current.playbackRate = 1.0; // Reset speed safety
                             audioRef.current.currentTime = targetTime;
