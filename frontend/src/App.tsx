@@ -23,6 +23,15 @@ export default function App() {
     const [audioFile, setAudioFile] = useState<File | null>(null);
     const [audioURL, setAudioURL] = useState<string | null>(null);
 
+    useEffect(()=>{
+        //flush the old track and load the new track when the url changes
+        //needed for mobile
+        if (audioRef.current && audioURL){
+            audioRef.current.load();
+        }
+    }, [audioURL])
+
+
     const createRoom = async () => {
         isHostRef.current = true;
 
@@ -38,12 +47,16 @@ export default function App() {
     const joinRoom = async () => {
         isHostRef.current = false;
 
-        // temporary bypass to get datachannel working
-        // await navigator.mediaDevices.getUserMedia({ audio: true });
-
         if (roomId.trim() !== '') {
-            setHasJoined(true);
             socketRef.current?.emit('join-room', roomId);
+            setHasJoined(true);
+            
+            //mobile-autoplay hack
+            if (audioRef.current) {
+                audioRef.current.play().catch(e => console.log("Silent play triggered to unlock audio"))
+                audioRef.current.pause();
+            }
+            
             console.log(`Joined room: ${roomId}`);
         }
     }
@@ -339,7 +352,7 @@ export default function App() {
 
     useEffect(() => {
         // connecting to our signaling server
-        socketRef.current = io('http://localhost:3000');
+        socketRef.current = io('http://10.29.198.114:3000');
 
         socketRef.current.on('connect', () => {
             console.log('Connected to signaling server! My ID:', socketRef.current?.id);

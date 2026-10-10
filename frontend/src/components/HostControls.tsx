@@ -19,9 +19,39 @@ export const HostControls: React.FC<HostControlsProps> = ({
     const [copied, setCopied] = useState(false);
 
     const copyRoomId = () => {
-        navigator.clipboard.writeText(roomId);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+
+        // Try modern clipboard API first (localhost and production HTTPS)
+        if (navigator.clipboard && window.isSecureContext) {
+           
+            navigator.clipboard.writeText(roomId).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            }).catch(err => console.error("Modern copy failed", err));
+        } else {
+
+            //Legacy fallback for HTTP network testing
+            const textArea = document.createElement("textarea");
+            textArea.value = roomId;
+
+            // Hide the text area so it doesn't break layout
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0";
+            document.body.appendChild(textArea);
+
+            textArea.focus();
+            textArea.select();
+
+            try {
+                document.execCommand('copy');
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            } catch (err) {
+                console.error("Fallback copy failed", err);
+            }
+
+            document.body.removeChild(textArea);
+        }
     };
 
     return (

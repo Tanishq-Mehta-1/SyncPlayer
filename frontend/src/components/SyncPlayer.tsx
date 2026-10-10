@@ -14,10 +14,11 @@ export const SyncPlayer: React.FC<SyncPlayerProps> = ({
     if (!audioURL) return null;
 
     return (
-        <div className='audio-player'>
+        <div className='audio-player' style={{ display: audioURL ? 'flex' : 'none' }}>
             <audio
+                loop
                 controls
-                src={audioURL}
+                src={audioURL || undefined}
                 ref={audioRef}
                 onPlay={(e) => broadcastCommand("PLAY", e.currentTarget.currentTime)}
                 onPause={(e) => broadcastCommand("PAUSE", e.currentTarget.currentTime)}
