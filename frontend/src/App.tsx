@@ -471,7 +471,7 @@ export default function App() {
 
     return (
         <div className='App-container'>
-            <h1>Sync</h1>
+            <h1>SyncPlayer</h1>
 
             {!hasJoined && (
                 <HostControls
