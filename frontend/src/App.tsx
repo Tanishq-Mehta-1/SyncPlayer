@@ -16,6 +16,7 @@ export default function App() {
     const pendingCandidatesRef = useRef<Map<string, RTCIceCandidate[]>>(new Map());
     const audioRef = useRef<HTMLAudioElement>(null);
     const audioFileRef = useRef<File | null>(null);
+    const clockOffsetRef = useRef<number>(0);
 
     const [roomId, setRoomId] = useState<string>('');
     const [hasJoined, setHasJoined] = useState<boolean>(false);
@@ -177,6 +178,24 @@ export default function App() {
             const receiveChannel = event.channel;
             console.log(`Guest caught the data channel from ${targetId}`)
 
+            const sendPing = () => {
+                if (!isHostRef.current) {
+                    receiveChannel.send(JSON.stringify({
+                        type: "PING",
+                        clientTime: Date.now()
+                    }));
+
+                    console.log("PING Sent")
+                }
+
+            };
+
+            if (receiveChannel.readyState === "open") {
+                sendPing();
+            } else {
+                receiveChannel.onopen = sendPing;
+            }
+
             let receiveBuffer: any[] = [];
 
             receiveChannel.onmessage = (messageEvent) => {
@@ -188,11 +207,26 @@ export default function App() {
                         receiveBuffer = [];
                     } else {
 
-                        if (!audioRef.current) return;
-                        if (audioRef.current.readyState === 0) return;
-
                         const command = JSON.parse(messageEvent.data);
-                        const delay = Math.max(0, (Date.now() - command.timestamp) / 1000);
+
+                        //Process PONG from host
+                        if (command.type === "PONG") {
+                            const roundTripTime = Date.now() - command.clientTime;
+                            const oneWayLatency = roundTripTime / 2;
+
+                            //Host's clock time
+                            const estimatedHostTime = command.serverTime + oneWayLatency;
+
+                            //gap between local and host time
+                            clockOffsetRef.current = estimatedHostTime - Date.now();
+                            console.log(`Clock sync complete. Offset: ${clockOffsetRef.current}ms | Latency: ${oneWayLatency}ms`);
+                            return;
+                        }
+
+                        if (!audioRef.current || audioRef.current.readyState === 0) return;
+
+                        const syncDateNow = Date.now() + clockOffsetRef.current;
+                        const delay = Math.max(0, (syncDateNow - command.timestamp) / 1000);
                         const targetTime = command.time + delay;
 
                         if (command.type === "SYNC") {
@@ -212,7 +246,6 @@ export default function App() {
                                 const drift = targetTime - audioRef.current.currentTime;
 
                                 if (Math.abs(drift) > 2.0) {
-                                    // 1. Massive desync (> 2s): Take the buffer stall penalty and hard snap
                                     audioRef.current.currentTime = targetTime;
                                     audioRef.current.playbackRate = 1.0;
                                 } else if (drift > 0.05) {
@@ -239,8 +272,9 @@ export default function App() {
                                 audioRef.current.play();
                             }
                         }
-                        console.log("Received data: ", messageEvent.data);
 
+
+                        // console.log("Received data: ", messageEvent.data);
 
                     }
                 } else {
@@ -261,12 +295,28 @@ export default function App() {
 
         //create the data channel and save to map
         const dataChannel = pc.createDataChannel(`sync-channel-${guestSocketId}`);
+
         dataChannel.onopen = async () => {
             console.log(`Data channel open with ${guestSocketId}`);
-
             if (audioFileRef.current != null) {
                 const arrayBuffer = await audioFileRef.current.arrayBuffer();
-                sendFileToGuest(guestSocketId, arrayBuffer)
+                sendFileToGuest(guestSocketId, arrayBuffer);
+            }
+        };
+
+        dataChannel.onmessage = (messageEvent) => {
+            if (typeof messageEvent.data === 'string' && messageEvent.data !== 'EOF') {
+                const command = JSON.parse(messageEvent.data);
+
+                if (command.type === "PING") {
+                    dataChannel.send(JSON.stringify({
+                        type: "PONG",
+                        clientTime: command.clientTime,
+                        serverTime: Date.now()
+                    }));
+
+                    console.log("PONG Sent")
+                }
             }
         };
 
@@ -399,6 +449,7 @@ export default function App() {
 
         return () => clearInterval(syncBroadcast);
     }, []);
+
     const handleFileSelect = (file: File) => {
         setAudioFile(file);
         audioFileRef.current = file;
@@ -406,7 +457,7 @@ export default function App() {
 
     return (
         <div className='App-container'>
-            <h1>P2P Sync App</h1>
+            <h1>Sync</h1>
 
             {!hasJoined && (
                 <HostControls
