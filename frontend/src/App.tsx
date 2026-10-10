@@ -258,18 +258,19 @@ export default function App() {
 
                                 const drift = targetTime - audioRef.current.currentTime;
 
+                                //widen the gaps so that mobile doesnt stutter
                                 if (Math.abs(drift) > 2.0) {
                                     audioRef.current.currentTime = targetTime;
                                     audioRef.current.playbackRate = 1.0;
-                                } else if (drift > 0.05) {
-                                    // 2. Guest is slightly behind (the 0.39s gap): Speed up 5% to catch up seamlessly
-                                    audioRef.current.playbackRate = 1.05;
-                                } else if (drift < -0.05) {
-                                    // 3. Guest is slightly ahead: Slow down 5%
-                                    audioRef.current.playbackRate = 0.95;
-                                } else {
-                                    // 4. Locked in (< 50ms): Return to normal speed
-                                    audioRef.current.playbackRate = 1.0;
+                                } else if (drift > 0.1) {
+                                    audioRef.current.playbackRate = 1.02;
+                                } else if (drift < -0.1) {
+                                    audioRef.current.playbackRate = 0.98;
+                                } else if (Math.abs(drift) < 0.04){
+
+                                    //only return to normal if we are locked in
+                                    if (audioRef.current.playbackRate !== 1.0)
+                                        audioRef.current.playbackRate = 1.0;
                                 }
                             }
 
