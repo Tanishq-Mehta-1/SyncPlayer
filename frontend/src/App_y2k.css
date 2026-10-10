@@ -1,0 +1,312 @@
+.App-container {
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: clamp(20px, 4vw, 38px);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  color: var(--ink);
+  text-align: left;
+  border: 3px solid #e4f0c4;
+  border-radius: 30px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.78), transparent 20%),
+    linear-gradient(135deg, #b9f84c 0%, #8ddc25 42%, #64b51c 100%);
+  box-shadow:
+    inset 0 3px 2px rgba(255,255,255,.9),
+    inset 0 -5px 0 rgba(44,102,13,.38),
+    0 12px 0 #276b34,
+    0 20px 38px rgba(0, 20, 35, .38);
+}
+
+.App-container::before {
+  content: "●  ●  ●   SYNCPLAYER 2000";
+  display: block;
+  margin: -6px 0 -12px;
+  padding: 9px 14px;
+  color: #244e17;
+  background: linear-gradient(#e5ff9c, #a9e943);
+  border: 1px solid rgba(63, 118, 21, .45);
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 #fff;
+  font: 20px var(--mono);
+  letter-spacing: 1px;
+}
+
+.App-container h1 {
+  position: relative;
+  margin: 0;
+  padding: 6px 10px 14px;
+  text-align: center;
+  color: #143d1a;
+  text-shadow: 0 2px 0 rgba(255,255,255,.65), 0 4px 0 rgba(42,103,14,.18);
+  letter-spacing: 1px;
+  line-height: .95;
+}
+
+.App-container h1::after {
+  content: "P2P AUDIO • LIVE SYNC • NO SKIPS";
+  display: block;
+  margin-top: 10px;
+  font: 18px var(--mono);
+  letter-spacing: 2px;
+  color: #315c1b;
+  text-shadow: none;
+}
+
+.host-container,
+.guest-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 25px 20px 20px;
+  border: 2px solid #467e25;
+  border-radius: 20px;
+  background: linear-gradient(160deg, #f0ffc8, #c6f477 58%, #a2df43);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.9), inset 0 -3px 0 rgba(72,120,29,.2), 0 5px 0 rgba(43,100,20,.25);
+}
+
+.host-container::before,
+.guest-container::before {
+  position: absolute;
+  top: 7px;
+  left: 14px;
+  font: 17px var(--mono);
+  color: #3c7021;
+  letter-spacing: 1px;
+}
+
+.host-container::before { content: "HOST CONSOLE"; }
+.guest-container::before { content: "JOIN THE FREQUENCY"; }
+
+button {
+  min-height: 44px;
+  padding: 10px 20px;
+  color: #193c18;
+  border: 2px solid #568a25;
+  border-radius: 999px;
+  background: linear-gradient(#f5ffcc 0%, #c4f66c 48%, #8ed52d 50%, #b7ef55 100%);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.95), inset 0 -2px 0 rgba(62,116,21,.25), 0 3px 0 #5a8e2d;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
+}
+
+button:hover { filter: brightness(1.08) saturate(1.1); transform: translateY(-1px); }
+button:active { transform: translateY(2px); box-shadow: inset 0 2px 4px rgba(0,0,0,.18); }
+
+input[type="text"] {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 15px;
+  color: #d7ff84;
+  background: #10190d;
+  border: 3px inset #82a95a;
+  border-radius: 10px;
+  font: 22px var(--mono);
+  letter-spacing: 1px;
+  outline: none;
+  box-shadow: inset 0 0 12px rgba(0,0,0,.6);
+}
+
+input[type="text"]::placeholder { color: #819b6a; }
+input[type="text"]:focus { border-color: #e7ff9c; box-shadow: 0 0 0 3px rgba(255,255,255,.45), inset 0 0 12px rgba(0,0,0,.6); }
+
+input[type="file"] {
+  width: 100%;
+  padding: 10px;
+  color: #274b1d;
+  border: 2px dashed #619d2b;
+  border-radius: 12px;
+  background: rgba(247,255,220,.62);
+  cursor: pointer;
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 8px 12px;
+  color: #244719;
+  border: 1px solid #6e9b3e;
+  border-radius: 999px;
+  background: linear-gradient(#fff, #d5f8a0);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.host-container p[title="Copy to clipboard"] {
+  border: 2px solid #709b42 !important;
+  background: linear-gradient(#faffed, #d5f7a4) !important;
+  box-shadow: inset 0 1px 0 white, 0 3px 0 rgba(65,112,28,.25);
+  font-family: var(--mono);
+  font-size: 19px;
+}
+
+code {
+  display: inline-flex;
+  padding: 3px 9px;
+  color: #d6ff75;
+  background: #14200e;
+  border: 1px solid #507a2b;
+  border-radius: 6px;
+  font: 21px var(--mono);
+}
+
+.audio-player {
+  position: relative;
+  margin-top: 0;
+  padding: 26px 20px 20px;
+  border: 3px solid #d6edb5;
+  border-radius: 24px;
+  background: linear-gradient(145deg, #eaffb0, #91df2e 50%, #65b71c);
+  box-shadow: inset 0 2px 0 white, inset 0 -4px 0 rgba(47,103,15,.35), 0 6px 0 #467c28;
+}
+
+.audio-player::before {
+  content: "♫  NOW TRANSMITTING  ♫";
+  display: block;
+  margin: 0 0 12px;
+  color: #2a5918;
+  text-align: center;
+  font: 20px var(--mono);
+  letter-spacing: 2px;
+}
+
+.audio-player audio {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 5px;
+  border: 3px solid #406c27;
+  border-radius: 14px;
+  background: #090d08;
+  filter: saturate(1.15);
+}
+
+.guest-container h2 { color: #2d661b !important; text-shadow: 0 1px white; }
+.guest-container p { color: #28471e; }
+.guest-container p strong { font-family: var(--mono); font-size: 22px; }
+
+@media (max-width: 600px) {
+  .App-container { border-radius: 22px; padding: 17px; gap: 17px; }
+  .App-container::before { font-size: 16px; }
+  .host-container, .guest-container { padding: 25px 14px 15px; }
+  .audio-player { padding: 22px 12px 14px; }
+  .audio-player::before { font-size: 17px; letter-spacing: 1px; }
+}
+
+
+/* Responsive and touch-friendly refinements */
+.App-container,
+.host-container,
+.guest-container,
+.audio-player {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+button,
+input[type="file"]::file-selector-button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button {
+  min-height: 46px;
+}
+
+audio {
+  max-width: 100%;
+}
+
+@media (max-width: 420px) {
+  .App-container {
+    padding: 13px;
+    gap: 15px;
+    border-width: 2px;
+    border-radius: 18px;
+  }
+
+  .App-container::before {
+    padding: 7px 9px;
+    font-size: 14px;
+    letter-spacing: .3px;
+    overflow-wrap: anywhere;
+  }
+
+  .App-container h1 {
+    font-size: clamp(38px, 13vw, 54px);
+  }
+
+  .App-container h1::after {
+    font-size: 14px;
+    letter-spacing: 1px;
+  }
+
+  .host-container,
+  .guest-container {
+    gap: 12px;
+    padding: 25px 11px 13px;
+  }
+
+  button {
+    width: 100%;
+    padding: 11px 12px;
+    font-size: 14px;
+  }
+
+  .host-container p[title="Copy to clipboard"] {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 5px;
+    padding: 10px !important;
+    font-size: 16px;
+  }
+
+  code {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    font-size: 18px;
+  }
+
+  input[type="text"] {
+    font-size: 20px;
+  }
+
+  input[type="file"] {
+    font-size: 13px;
+  }
+
+  input[type="file"]::file-selector-button {
+    display: block;
+    margin: 0 0 8px;
+    max-width: 100%;
+  }
+
+  .audio-player {
+    padding: 19px 9px 12px;
+    border-radius: 17px;
+  }
+
+  .audio-player::before {
+    font-size: 15px;
+    letter-spacing: .5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

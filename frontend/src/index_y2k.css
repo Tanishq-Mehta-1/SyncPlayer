@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=VT323&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  font-family: "Space Grotesk", Tahoma, Verdana, sans-serif;
+  color: #102b21;
+  background: #286c9b;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --ink: #102b21;
+  --green: #a8f32e;
+  --green-light: #d9ff71;
+  --green-dark: #4f9415;
+  --chrome: #e7e9dd;
+  --chrome-shadow: #7b8175;
+  --screen: #030503;
+  --blue: #286c9b;
+  --mono: "VT323", "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { min-width: 320px; min-height: 100%; -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(100, 191, 228, .45), transparent 48%),
+    linear-gradient(135deg, #2e7eab 0%, #24608e 52%, #174b79 100%);
+  background-attachment: fixed;
+}
+
+body::before {
+  content: "SYNCPLAYER.EXE   •   PERSONAL AUDIO NETWORK";
+  position: fixed;
+  top: 16px;
+  left: 18px;
+  color: rgba(235, 255, 250, .75);
+  font: 18px var(--mono);
+  letter-spacing: 1px;
+  pointer-events: none;
+}
+
+#root {
+  width: min(100%, 1040px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(28px, 7vh, 76px) 20px 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+h1, h2, p { margin-top: 0; }
+
+h1, h2 {
+  font-family: "VT323", "Courier New", monospace;
+  font-weight: 400;
+}
+
+h1 { font-size: clamp(42px, 7vw, 76px); }
+h2 { font-size: 30px; }
+
+button, input { font: inherit; }
+
+::selection { background: #d8ff5d; color: #122513; }
+
+@media (max-width: 600px) {
+  body::before { font-size: 13px; top: 8px; left: 10px; }
+  #root { padding: 48px 12px 24px; align-items: flex-start; }
+}

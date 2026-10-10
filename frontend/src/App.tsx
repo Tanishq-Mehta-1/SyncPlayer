@@ -5,7 +5,8 @@ import { io, Socket } from 'socket.io-client';
 import { HostControls } from './components/HostControls';
 import { GuestControls } from './components/GuestControls';
 import { SyncPlayer } from './components/SyncPlayer';
-import './App.css';
+// import './App.css';
+import './App_y2k.css';
 
 export default function App() {
 
