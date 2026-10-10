@@ -18,6 +18,7 @@ export default function App() {
     const audioFileRef = useRef<File | null>(null);
 
     const [roomId, setRoomId] = useState<string>('');
+    const [hasJoined, setHasJoined] = useState<boolean>(false);
     const [audioFile, setAudioFile] = useState<File | null>(null);
     const [audioURL, setAudioURL] = useState<string | null>(null);
 
@@ -40,6 +41,7 @@ export default function App() {
         // await navigator.mediaDevices.getUserMedia({ audio: true });
 
         if (roomId.trim() !== '') {
+            setHasJoined(true);
             socketRef.current?.emit('join-room', roomId);
             console.log(`Joined room: ${roomId}`);
         }
@@ -397,60 +399,40 @@ export default function App() {
 
         return () => clearInterval(syncBroadcast);
     }, []);
+    const handleFileSelect = (file: File) => {
+        setAudioFile(file);
+        audioFileRef.current = file;
+    };
+
     return (
         <div className='App-container'>
             <h1>P2P Sync App</h1>
 
-            <div className='host-container'>
-                <button onClick={createRoom}>Create Party (Host) </button>
-                {isHostRef.current && roomId && <p><strong>ROOM ID: </strong>{roomId}</p>}
-
-                {isHostRef.current && (
-                    <input
-                        className="file-picker"
-                        type="file"
-                        accept='audio/*'
-                        onChange={(e) => {
-                            if (e.target.files != null) {
-                                setAudioFile(e.target.files[0])
-                                audioFileRef.current = e.target.files[0];
-                            }
-                        }}
-                    />
-                )}
-
-                <button
-                    className='send-audiobtn'
-                    onClick={sendAudioFile}
-                >
-                    Send Audio
-                </button>
-            </div>
-
-            <div className='guest-container'>
-                <input
-                    className='join-input'
-                    type="text"
-                    placeholder='Enter Room ID'
-                    value={roomId}
-                    onChange={(e) => setRoomId(e.target.value)}
+            {!hasJoined && (
+                <HostControls
+                    isHost={isHostRef.current}
+                    roomId={roomId}
+                    createRoom={createRoom}
+                    onFileSelect={handleFileSelect}
+                    sendAudioFile={sendAudioFile}
                 />
-                <button className='join-button' onClick={joinRoom}>Join Party (Guest)</button>
-            </div>
+            )}
 
-            <div className='audio-player'>
-                {audioURL && (
-                    <audio
-                        controls
-                        src={audioURL}
-                        ref={audioRef}
-                        onPlay={(e) => broadcastCommand("PLAY", e.currentTarget.currentTime)}
-                        onPause={(e) => broadcastCommand("PAUSE", e.currentTarget.currentTime)}
-                        onSeeked={(e) => broadcastCommand('SEEK', e.currentTarget.currentTime)}
-                    />
-                )}
-            </div>
+            {!isHostRef.current && (
+                <GuestControls
+                    roomId={roomId}
+                    setRoomId={setRoomId}
+                    joinRoom={joinRoom}
+                    hasJoined={hasJoined}
+                />
+            )}
 
+            <SyncPlayer
+                isHost={isHostRef.current}
+                audioURL={audioURL}
+                audioRef={audioRef}
+                broadcastCommand={broadcastCommand}
+            />
         </div>
     )
 }
