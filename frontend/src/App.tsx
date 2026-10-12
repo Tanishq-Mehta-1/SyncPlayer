@@ -52,6 +52,27 @@ export default function App() {
         }
     }, [alertMessage])
 
+    const leaveRoom = () => {
+        // Close all peer connections
+        peersRef.current.forEach(pc => pc.close());
+        peersRef.current.clear();
+        fileChannelRef.current.clear();
+        syncChannelRef.current.clear();
+        pendingCandidatesRef.current.clear();
+
+        // Reset UI and app state
+        setRoomId('');
+        setHasJoined(false);
+        setAudioFile(null);
+        setAudioURL(null);
+        isHostRef.current = false;
+        audioFileRef.current = null;
+
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.src = '';
+        }
+    };
 
     const createRoom = async () => {
         isHostRef.current = true;
@@ -514,6 +535,20 @@ export default function App() {
     return (
         <div className='App-container'>
             <h1>SyncPlayer</h1>
+
+            {(hasJoined || isHostRef.current) && (
+                <button
+                    onClick={leaveRoom}
+                    style={{
+                        marginBottom: '10px',
+                        background: 'linear-gradient(#ffccd5 0%, #ff8099 48%, #ff4d6d 50%, #ff8099 100%)',
+                        borderColor: '#cc0022',
+                        color: '#4d000d'
+                    }}
+                >
+                    ⬅ Disconnect & Go Back
+                </button>
+            )}
 
             {alertMessage && (
                 <div className="win95-overlay">
