@@ -13,8 +13,7 @@ export default function App() {
     const socketRef = useRef<Socket | null>(null);
     const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
     const isHostRef = useRef<boolean>(false);
-    const fileChannelRef = useRef<Map<string, RTCDataChannel>>(new Map());
-    const syncChannelRef = useRef<Map<string, RTCDataChannel>>(new Map());
+    const dataChannelRef = useRef<Map<string, RTCDataChannel>>(new Map());
     const pendingCandidatesRef = useRef<Map<string, RTCIceCandidate[]>>(new Map());
     const audioRef = useRef<HTMLAudioElement>(null);
     const audioFileRef = useRef<File | null>(null);
@@ -25,10 +24,10 @@ export default function App() {
     const [audioFile, setAudioFile] = useState<File | null>(null);
     const [audioURL, setAudioURL] = useState<string | null>(null);
 
-    useEffect(() => {
+    useEffect(()=>{
         //flush the old track and load the new track when the url changes
         //needed for mobile
-        if (audioRef.current && audioURL) {
+        if (audioRef.current && audioURL){
             audioRef.current.load();
         }
     }, [audioURL])
@@ -52,20 +51,20 @@ export default function App() {
         if (roomId.trim() !== '') {
             socketRef.current?.emit('join-room', roomId);
             setHasJoined(true);
-
+            
             //mobile-autoplay hack
             if (audioRef.current) {
                 audioRef.current.play().catch(e => console.log("Silent play triggered to unlock audio"))
                 audioRef.current.pause();
             }
-
+            
             console.log(`Joined room: ${roomId}`);
         }
     }
 
     const broadcastCommand = (type: string, time: number, isPlaying?: boolean) => {
         peersRef.current.forEach((pc, guestId) => {
-            const dc = syncChannelRef.current.get(guestId);
+            const dc = dataChannelRef.current.get(guestId);
             if (dc && dc.readyState === 'open') {
                 dc.send(JSON.stringify({
                     type,
@@ -81,7 +80,7 @@ export default function App() {
 
     const sendFileToGuest = async (guestId: string, arrayBuffer: ArrayBuffer) => {
 
-        const dc = fileChannelRef.current.get(guestId);
+        const dc = dataChannelRef.current.get(guestId);
         if (!dc || dc.readyState !== 'open') return;
 
         const CHUNK_SIZE = 16384; // 16KB
@@ -191,115 +190,111 @@ export default function App() {
 
         pc.ondatachannel = (event) => {
             const receiveChannel = event.channel;
+            console.log(`Guest caught the data channel from ${targetId}`)
 
-            if (receiveChannel.label.startsWith('sync-channel')) {
+            const sendPing = () => {
+                if (!isHostRef.current) {
+                    receiveChannel.send(JSON.stringify({
+                        type: "PING",
+                        clientTime: Date.now()
+                    }));
 
-                
-                const sendPing = () => {
-                    if (!isHostRef.current && receiveChannel.readyState === "open") {
-                        receiveChannel.send(JSON.stringify({
-                            type: "PING",
-                            clientTime: Date.now()
-                        }));
-                        
-                        console.log("PING Sent")
-                    }
-                };
-                
-                let pingInterval: NodeJS.Timeout;
-                receiveChannel.onopen = () => {
-                    sendPing();
-                    pingInterval = setInterval(sendPing, 1000);
+                    console.log("PING Sent")
                 }
 
+            };
 
-                receiveChannel.onmessage = (messageEvent) => {
-                    const command = JSON.parse(messageEvent.data);
+            if (receiveChannel.readyState === "open") {
+                sendPing();
+            } else {
+                receiveChannel.onopen = sendPing;
+            }
 
-                    //Process PONG from host
-                    if (command.type === "PONG") {
+            let receiveBuffer: any[] = [];
 
-                        clearInterval(pingInterval);
+            receiveChannel.onmessage = (messageEvent) => {
 
-                        const roundTripTime = Date.now() - command.clientTime;
-                        const oneWayLatency = roundTripTime / 2;
+                if (typeof messageEvent.data === 'string') {
 
-                        //Host's clock time
-                        const estimatedHostTime = command.serverTime + oneWayLatency;
-
-                        //gap between local and host time
-                        clockOffsetRef.current = estimatedHostTime - Date.now();
-                        console.log(`Clock sync complete. Offset: ${clockOffsetRef.current}ms | Latency: ${oneWayLatency}ms`);
-                        return;
-                    }
-
-                    if (!audioRef.current || audioRef.current.readyState === 0) return;
-
-                    const syncDateNow = Date.now() + clockOffsetRef.current;
-                    const delay = Math.max(0, (syncDateNow - command.timestamp) / 1000);
-                    const targetTime = command.time + delay;
-
-                    if (command.type === "SYNC") {
-
-                        if (command.isPlaying && audioRef.current.paused) {
-
-                            audioRef.current.currentTime = targetTime;
-                            audioRef.current.play().catch(e => console.error("Autoplay blocked by browser:", e));
-
-                        } else if (!command.isPlaying && !audioRef.current.paused) {
-
-                            audioRef.current.pause();
-                            audioRef.current.currentTime = targetTime;
-
-                        } else if (command.isPlaying) {
-
-                            const drift = targetTime - audioRef.current.currentTime;
-
-                            //widen the gaps so that mobile doesnt stutter
-                            if (Math.abs(drift) > 2.0) {
-                                audioRef.current.currentTime = targetTime;
-                                audioRef.current.playbackRate = 1.0;
-                            } else if (drift > 0.1) {
-                                audioRef.current.playbackRate = 1.02;
-                            } else if (drift < -0.1) {
-                                audioRef.current.playbackRate = 0.98;
-                            } else if (Math.abs(drift) < 0.04) {
-
-                                //only return to normal if we are locked in
-                                if (audioRef.current.playbackRate !== 1.0)
-                                    audioRef.current.playbackRate = 1.0;
-                            }
-                        }
-
-                    } else {
-
-                        // Explicit Commands (PLAY, PAUSE, SEEK)
-                        audioRef.current.playbackRate = 1.0; // Reset speed safety
-                        audioRef.current.currentTime = targetTime;
-
-                        if (command.type === "PAUSE") {
-                            audioRef.current.pause();
-                        } else if (command.type === "PLAY") {
-                            audioRef.current.play();
-                        }
-                    }
-
-
-                    // console.log("Received data: ", messageEvent.data);   
-
-                }
-            } else if (receiveChannel.label.startsWith('file-channel')) {
-
-                let receiveBuffer: any[] = [];
-                receiveChannel.onmessage = (messageEvent) => {
-                    if (messageEvent.data === 'EOF') {
+                    if (messageEvent.data === "EOF") {
                         generateAudioURLBuffer(receiveBuffer);
                         receiveBuffer = [];
                     } else {
-                        receiveBuffer.push(messageEvent.data);
-                    }
-                }
 
+                        const command = JSON.parse(messageEvent.data);
+
+                        //Process PONG from host
+                        if (command.type === "PONG") {
+                            const roundTripTime = Date.now() - command.clientTime;
+                            const oneWayLatency = roundTripTime / 2;
+
+                            //Host's clock time
+                            const estimatedHostTime = command.serverTime + oneWayLatency;
+
+                            //gap between local and host time
+                            clockOffsetRef.current = estimatedHostTime - Date.now();
+                            console.log(`Clock sync complete. Offset: ${clockOffsetRef.current}ms | Latency: ${oneWayLatency}ms`);
+                            return;
+                        }
+
+                        if (!audioRef.current || audioRef.current.readyState === 0) return;
+
+                        const syncDateNow = Date.now() + clockOffsetRef.current;
+                        const delay = Math.max(0, (syncDateNow - command.timestamp) / 1000);
+                        const targetTime = command.time + delay;
+
+                        if (command.type === "SYNC") {
+
+                            if (command.isPlaying && audioRef.current.paused) {
+
+                                audioRef.current.currentTime = targetTime;
+                                audioRef.current.play().catch(e => console.error("Autoplay blocked by browser:", e));
+
+                            } else if (!command.isPlaying && !audioRef.current.paused) {
+
+                                audioRef.current.pause();
+                                audioRef.current.currentTime = targetTime;
+
+                            } else if (command.isPlaying) {
+
+                                const drift = targetTime - audioRef.current.currentTime;
+
+                                //widen the gaps so that mobile doesnt stutter
+                                if (Math.abs(drift) > 2.0) {
+                                    audioRef.current.currentTime = targetTime;
+                                    audioRef.current.playbackRate = 1.0;
+                                } else if (drift > 0.1) {
+                                    audioRef.current.playbackRate = 1.02;
+                                } else if (drift < -0.1) {
+                                    audioRef.current.playbackRate = 0.98;
+                                } else if (Math.abs(drift) < 0.04){
+
+                                    //only return to normal if we are locked in
+                                    if (audioRef.current.playbackRate !== 1.0)
+                                        audioRef.current.playbackRate = 1.0;
+                                }
+                            }
+
+                        } else {
+
+                            // Explicit Commands (PLAY, PAUSE, SEEK)
+                            audioRef.current.playbackRate = 1.0; // Reset speed safety
+                            audioRef.current.currentTime = targetTime;
+
+                            if (command.type === "PAUSE") {
+                                audioRef.current.pause();
+                            } else if (command.type === "PLAY") {
+                                audioRef.current.play();
+                            }
+                        }
+
+
+                        // console.log("Received data: ", messageEvent.data);
+
+                    }
+                } else {
+                    receiveBuffer.push(messageEvent.data);
+                }
             }
         }
 
@@ -313,10 +308,10 @@ export default function App() {
 
         const pc = createPeerConnection(guestSocketId);
 
-        //create the file(reliable) and sync(unreliable) channels
-        const fileChannel = pc.createDataChannel(`file-channel-${guestSocketId}`);
+        //create the data channel and save to map
+        const dataChannel = pc.createDataChannel(`sync-channel-${guestSocketId}`);
 
-        fileChannel.onopen = async () => {
+        dataChannel.onopen = async () => {
             console.log(`Data channel open with ${guestSocketId}`);
             if (audioFileRef.current != null) {
                 const arrayBuffer = await audioFileRef.current.arrayBuffer();
@@ -324,19 +319,12 @@ export default function App() {
             }
         };
 
-        fileChannelRef.current.set(guestSocketId, fileChannel);
-
-        const syncChannel = pc.createDataChannel(`sync-channel-${guestSocketId}`, {
-            ordered: false,
-            maxRetransmits: 0
-        });
-
-        syncChannel.onmessage = (messageEvent) => {
+        dataChannel.onmessage = (messageEvent) => {
             if (typeof messageEvent.data === 'string' && messageEvent.data !== 'EOF') {
                 const command = JSON.parse(messageEvent.data);
 
                 if (command.type === "PING") {
-                    syncChannel.send(JSON.stringify({
+                    dataChannel.send(JSON.stringify({
                         type: "PONG",
                         clientTime: command.clientTime,
                         serverTime: Date.now()
@@ -347,8 +335,7 @@ export default function App() {
             }
         };
 
-        syncChannelRef.current.set(guestSocketId, syncChannel);
-
+        dataChannelRef.current.set(guestSocketId, dataChannel);
 
         //create the SDP offer
         const offer = await pc.createOffer();
@@ -368,7 +355,6 @@ export default function App() {
     useEffect(() => {
         // connecting to our signaling server
         socketRef.current = io('http://10.29.198.114:3000');
-        // socketRef.current = io('http://localhost:3000');
 
         socketRef.current.on('connect', () => {
             console.log('Connected to signaling server! My ID:', socketRef.current?.id);
@@ -471,11 +457,8 @@ export default function App() {
     useEffect(() => {
         const syncBroadcast = setInterval(() => {
             if (isHostRef.current && audioRef.current) {
-                // console.log("Host is broadcasting SYNC...");
-
-                broadcastCommand('SYNC',
-                    audioRef.current.currentTime,
-                    !audioRef.current.paused);
+                console.log("Host is broadcasting SYNC...");
+                broadcastCommand('SYNC', audioRef.current.currentTime, !audioRef.current.paused);
             }
         }, 2000);
 
