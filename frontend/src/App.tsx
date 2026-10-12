@@ -212,13 +212,26 @@ export default function App() {
             ]
         });
 
-        // pc.oniceconnectionstatechange = () => {
-        //     console.log(`ICE Connection State for ${targetId}:`, pc.iceConnectionState);
-        // }
+        pc.onconnectionstatechange = () => {
 
-        // pc.onconnectionstatechange = () => {
-        //     console.log(`Global Connection State for ${targetId}:`, pc.connectionState);
-        // }
+            console.log(`Global Connection State for ${targetId}:`, pc.connectionState);
+
+            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+                if (!isHostRef.current) {
+                    //host dropped the connection, we are guests
+                    leaveRoom();
+                    setAlertMessage('The host has closed the room');
+                } else {
+                    //guest closed the connection
+                    peersRef.current.delete(targetId);
+                    fileChannelRef.current.delete(targetId);
+                    syncChannelRef.current.delete(targetId);
+                    console.log(`Guest ${targetId} disconnected.`);
+                }
+            }
+        }
+
+
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
