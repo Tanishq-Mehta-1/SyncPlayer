@@ -157,6 +157,83 @@ code {
   font: 21px var(--mono);
 }
 
+.win95-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.win95-dialog {
+  background: #c0c0c0;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  border-right: 2px solid #000;
+  border-bottom: 2px solid #000;
+  width: 450px;
+  max-width: 90%;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+  color: black;
+  box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf;
+  padding: 2px;
+}
+
+.win95-titlebar {
+  background: #000080;
+  color: white;
+  padding: 2px 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.win95-close {
+  background: #c0c0c0;
+  color: black;
+  border-top: 1px solid #fff;
+  border-left: 1px solid #fff;
+  border-right: 1px solid #000;
+  border-bottom: 1px solid #000;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.win95-content {
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-size: 13px;
+}
+
+.win95-icon {
+  background: red;
+  color: white;
+  border-radius: 50%;
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 22px;
+  font-weight: bold;
+  box-shadow: 1px 1px 0 #000;
+}
+
 .audio-player {
   position: relative;
   margin-top: 0;
@@ -310,3 +387,4 @@ audio {
     transition-duration: .01ms !important;
   }
 }
+

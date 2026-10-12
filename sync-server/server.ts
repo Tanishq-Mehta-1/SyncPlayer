@@ -26,11 +26,21 @@ const io = new Server(server, {
 io.on('connection', (socket: Socket) => {
     console.log(`User connected: ${socket.id}`);
 
-    socket.on('join-room', (roomId: string) => {
-        socket.join(roomId);
-        console.log(`Socket ${socket.id} joined room: ${roomId}`);
+    socket.on('join-room', (roomId: string, callback) => {
 
+        //check if room exists
+        const roomExists:boolean = io.sockets.adapter.rooms.has(roomId);
+
+        if (callback && !roomExists) {
+            callback({success: false, message: "Room not found"});
+            return;
+        }
+
+        socket.join(roomId);
         socket.to(roomId).emit('peer-joined', socket.id);
+        console.log(`Socket ${socket.id} joined room: ${roomId}`);
+        if (callback)
+            callback({success: true})
     })
 
     socket.on('signal', (payload: SignalPayload) => {
