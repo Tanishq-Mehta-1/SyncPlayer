@@ -7,9 +7,9 @@ import {
     SIGNALING_URL,
     SYNC_BROADCAST_INTERVAL_MS,
 } from '../config.ts';
-import { createAudioURL } from '../utils/audio';
-import { sendFileOverChannel } from '../utils/fileTransfer';
-import { applyPlaybackCommand } from '../utils/playbackSync';
+import { createAudioURL } from '../utils/audio.ts';
+import { sendFileOverChannel } from '../utils/fileTransfer.ts';
+import { applyPlaybackCommand } from '../utils/playbackSync.ts';
 
 export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
     // ---- Refs (mutable, non-rendering state) ----

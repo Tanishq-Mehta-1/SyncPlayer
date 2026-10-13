@@ -1,4 +1,4 @@
-import { FILE_CHUNK_SIZE, FILE_MAX_BUFFER } from '../config';
+import { FILE_CHUNK_SIZE, FILE_MAX_BUFFER } from '../config.js';
 
 /** Streams an ArrayBuffer over a data channel in chunks, respecting backpressure. */
 export function sendFileOverChannel(dc: RTCDataChannel | undefined, arrayBuffer: ArrayBuffer): void {

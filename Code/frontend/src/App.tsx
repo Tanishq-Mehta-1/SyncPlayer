@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { HostControls } from './components/HostControls';
-import { GuestControls } from './components/GuestControls';
-import { SyncPlayer } from './components/SyncPlayer';
-import { DisconnectButton } from './components/DisconnectButton';
-import { ErrorDialog } from './components/ErrorDialog';
-import { useWebRTC } from './hooks/useWebRTC';
-import { useAutoDismiss } from './hooks/useAutoDismiss';
+import { HostControls } from './components/HostControls.js';
+import { GuestControls } from './components/GuestControls.js';
+import { SyncPlayer } from './components/SyncPlayer.js';
+import { DisconnectButton } from './components/DisconnectButton.js';
+import { ErrorDialog } from './components/ErrorDialog.js';
+import { useWebRTC } from './hooks/useWebRTC.js';
+import { useAutoDismiss } from './hooks/useAutoDismiss.js';
 import './App_y2k.css';
 
 export default function App() {

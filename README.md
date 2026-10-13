@@ -2,6 +2,23 @@
 
 A local-network peer-to-peer audio streaming application designed to synchronize playback across desktop and mobile devices. Built with React, WebRTC DataChannels, and Socket.io.
 
+<div align="center">
+  <table>
+    <tr>
+      <td align="center"><img src="images/home.png" alt="Home screen" width="280"></td>
+      <td align="center"><img src="images/host.png" alt="Host interface" width="280"></td>
+      <td align="center"><img src="images/guest.png" alt="Guest interface" width="280"></td>
+    </tr>
+    <tr>
+      <td align="center"><b>Home</b></td>
+      <td align="center"><b>Host</b></td>
+      <td align="center"><b>Guest</b></td>
+    </tr>
+  </table>
+</div>
+
+UI inspired by Y2K 
+
 ## Features
 
 ### Core P2P
