@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { io, Socket } from 'socket.io-client';
 import {
     ICE_SERVERS,
@@ -30,12 +30,16 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
     const [alertMessage, setAlertMessage] = useState<string>('');
 
     // ---- Room lifecycle ----
-    const leaveRoom = () => {
+    const leaveRoom = useCallback(() => {
         peersRef.current.forEach(pc => pc.close());
         peersRef.current.clear();
         fileChannelRef.current.clear();
         syncChannelRef.current.clear();
         pendingCandidatesRef.current.clear();
+
+        if (roomId) {
+            socketRef.current?.emit('leave-room', roomId);
+        }
 
         setRoomId('');
         setHasJoined(false);
@@ -48,7 +52,17 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
             audioRef.current.pause();
             audioRef.current.src = '';
         }
-    };
+
+
+    }, [roomId, audioRef]);
+
+    useEffect(() => {
+
+        const handleUnload = () => leaveRoom();
+        window.addEventListener('beforeunload', handleUnload)
+        return () => window.removeEventListener('beforeunload', handleUnload);
+
+    }, [leaveRoom])
 
     const createRoom = async () => {
         isHostRef.current = true;
@@ -171,7 +185,7 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
         const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
         pc.onconnectionstatechange = () => {
-            console.log(`Global Connection State for ${targetId}:`, pc.connectionState);
+            // console.log(`Global Connection State for ${targetId}:`, pc.connectionState);
 
             if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
                 if (!isHostRef.current) {
@@ -183,7 +197,7 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
                     peersRef.current.delete(targetId);
                     fileChannelRef.current.delete(targetId);
                     syncChannelRef.current.delete(targetId);
-                    console.log(`Guest ${targetId} disconnected.`);
+                    // console.log(`Guest ${targetId} disconnected.`);
                 }
             }
         };
@@ -330,6 +344,10 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
                 console.log(`A guest joined with ID: ${guestSocketId}`);
                 initiateHandshake(guestSocketId);
             }
+        });
+
+        socket.on('peer-left', (guestSocketId: string) => {
+            console.log(`guest ${guestSocketId} has left the room`);
         });
 
         socket.on('signal', handleSignal);

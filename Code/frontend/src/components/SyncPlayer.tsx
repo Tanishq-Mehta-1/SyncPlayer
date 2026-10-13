@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 interface SyncPlayerProps {
     audioURL: string | null;
@@ -11,6 +11,12 @@ export const SyncPlayer: React.FC<SyncPlayerProps> = ({
     audioRef,
     broadcastCommand
 }) => {
+    useEffect(() => {
+        if (audioRef.current && audioURL) {
+            audioRef.current.load();
+        }
+    }, [audioURL, audioRef]);
+
     if (!audioURL) return null;
 
     return (
