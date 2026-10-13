@@ -77,7 +77,7 @@ The application requires network access to facilitate cross-device communication
 
 ## Roadmap
 
-* **Graceful Disconnections:** Proper cleanup of WebRTC data channels and socket connections when a peer leaves the session.
+* ~~**Graceful Disconnections:** Proper cleanup of WebRTC data channels and socket connections when a peer leaves the session.~~
 
 * **Dropout Recovery:** Implementation of reconnection logic for temporary packet loss or Wi-Fi drops.
 
