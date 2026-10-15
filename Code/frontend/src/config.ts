@@ -1,5 +1,5 @@
-export const SIGNALING_URL = 'http://10.29.198.114:3000';
-// export const SIGNALING_URL = 'http://localhost:3000';
+// export const SIGNALING_URL = 'http://10.29.198.114:3000';
+export const SIGNALING_URL = 'http://localhost:3000';
 
 //dont use, ethernet ip, phone only works for cellular hotspot
 // export const SIGNALING_URL = 'http://172.29.182.224:3000'; 

@@ -3,26 +3,25 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { io, Socket } from 'socket.io-client';
 import {
     ICE_SERVERS,
-    PING_INTERVAL_MS,
     SIGNALING_URL,
-    SYNC_BROADCAST_INTERVAL_MS,
 } from '../config.ts';
 import { createAudioURL } from '../utils/audio.ts';
-import { sendFileOverChannel } from '../utils/fileTransfer.ts';
-import { applyPlaybackCommand } from '../utils/playbackSync.ts';
 
 export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
     // ---- Refs (mutable, non-rendering state) ----
     const socketRef = useRef<Socket | null>(null);
     const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
-    const fileChannelRef = useRef<Map<string, RTCDataChannel>>(new Map());
     const syncChannelRef = useRef<Map<string, RTCDataChannel>>(new Map());
     const pendingCandidatesRef = useRef<Map<string, RTCIceCandidate[]>>(new Map());
     const isHostRef = useRef<boolean>(false);
     const audioFileRef = useRef<File | null>(null);
-    const clockOffsetRef = useRef<number>(0);
+    const liveStreamRef = useRef<MediaStream | null>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
 
     // ---- State (drives rendering) ----
+    const [isPlaying, setIsPlaying] = useState<boolean>(false);
+    const [progress, setProgress] = useState<number>(0);
+    const [songTitle, setSongTitle] = useState<string | null>(null);
     const [roomId, setRoomId] = useState<string>('');
     const [hasJoined, setHasJoined] = useState<boolean>(false);
     const [isHost, setIsHost] = useState<boolean>(false);
@@ -34,7 +33,6 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
     const leaveRoom = useCallback(() => {
         peersRef.current.forEach(pc => pc.close());
         peersRef.current.clear();
-        fileChannelRef.current.clear();
         syncChannelRef.current.clear();
         pendingCandidatesRef.current.clear();
 
@@ -64,6 +62,30 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
         return () => window.removeEventListener('beforeunload', handleUnload);
 
     }, [leaveRoom])
+
+    useEffect(() => {
+        if (isHostRef.current) {
+            if (!audioContextRef.current && audioRef.current) {
+                //intialise audio context for browser
+                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                audioContextRef.current = new AudioContextClass();
+
+                //node that outputs the WebRTC MediaStream
+                const destNode = audioContextRef.current.createMediaStreamDestination()
+                liveStreamRef.current = destNode.stream;
+
+                //route the <audio> element as source
+                const sourceNode = audioContextRef.current.createMediaElementSource(audioRef.current);
+
+                //send audio to WebRTC node
+                sourceNode.connect(destNode);
+                //send audio to system's speakers
+                sourceNode.connect(audioContextRef.current.destination);
+
+                console.log(`MediaStream setup`)
+            }
+        }
+    }, [audioRef, isHost])
 
     const createRoom = async () => {
         isHostRef.current = true;
@@ -99,16 +121,30 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
     };
 
     // ---- Host: broadcasting & file sending ----
-    const broadcastCommand = (type: string, time: number, isPlaying?: boolean) => {
+    // const broadcastCommand = (type: string, time: number, isPlaying?: boolean) => {
+    //     peersRef.current.forEach((_pc, guestId) => {
+    //         const dc = syncChannelRef.current.get(guestId);
+    //         // console.log(`Guest ${guestId}'s data channel: ${dc?.readyState}`);
+    //         if (dc && dc.readyState === 'open') {
+    //             dc.send(JSON.stringify({
+    //                 type,
+    //                 time,
+    //                 isPlaying: isPlaying === true,
+    //                 timestamp: Date.now(),
+    //             }));
+    //         }
+    //     });
+    // };
+
+        const broadcastCommand = (type: string, time?: number, title?: string) => {
         peersRef.current.forEach((_pc, guestId) => {
             const dc = syncChannelRef.current.get(guestId);
-            console.log(`Guest ${guestId}'s data channel: ${dc?.readyState}`);
             if (dc && dc.readyState === 'open') {
+                console.log(`Status of ${guestId} data channel: ${dc.readyState}`)
                 dc.send(JSON.stringify({
                     type,
                     time,
-                    isPlaying: isPlaying === true,
-                    timestamp: Date.now(),
+                    title,
                 }));
             }
         });
@@ -116,70 +152,8 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
 
     const handleFileSelect = (file: File) => {
         audioFileRef.current = file;
-    };
 
-    const sendAudioFile = async (): Promise<void> => {
-        const file = audioFileRef.current;
-        if (!file) {
-            console.log('No audio file selected!');
-            return;
-        }
-
-        setAudioURL(createAudioURL([file]));
-
-        const arrayBuffer = await file.arrayBuffer();
-        peersRef.current.forEach((_pc, guestId) => {
-            sendFileOverChannel(fileChannelRef.current.get(guestId), arrayBuffer);
-        });
-    };
-
-    // ---- Guest: receiving channels ----
-    const setupSyncReceiver = (channel: RTCDataChannel) => {
-        const sendPing = () => {
-            if (!isHostRef.current && channel.readyState === 'open') {
-                channel.send(JSON.stringify({ type: 'PING', clientTime: Date.now() }));
-                console.log('PING Sent');
-            }
-        };
-
-        let pingInterval: ReturnType<typeof setInterval>;
-        channel.onopen = () => {
-            sendPing();
-            pingInterval = setInterval(sendPing, PING_INTERVAL_MS);
-        };
-
-        channel.onmessage = (messageEvent) => {
-            const command = JSON.parse(messageEvent.data);
-
-            // Process PONG from host
-            if (command.type === 'PONG') {
-                clearInterval(pingInterval);
-
-                const oneWayLatency = (Date.now() - command.clientTime) / 2;
-                const estimatedHostTime = command.serverTime + oneWayLatency;
-
-                // gap between local and host time
-                clockOffsetRef.current = estimatedHostTime - Date.now();
-                console.log(`Clock sync complete. Offset: ${clockOffsetRef.current}ms | Latency: ${oneWayLatency}ms`);
-                return;
-            }
-
-            if (audioRef.current) {
-                applyPlaybackCommand(audioRef.current, command, clockOffsetRef.current);
-            }
-        };
-    };
-
-    const setupFileReceiver = (channel: RTCDataChannel) => {
-        let receiveBuffer: any[] = [];
-        channel.onmessage = (messageEvent) => {
-            if (messageEvent.data === 'EOF') {
-                setAudioURL(createAudioURL(receiveBuffer));
-                receiveBuffer = [];
-            } else {
-                receiveBuffer.push(messageEvent.data);
-            }
-        };
+        setAudioURL(createAudioURL([file]))
     };
 
     // ---- Peer connection ----
@@ -204,7 +178,6 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
                 } else {
                     // guest closed the connection
                     peersRef.current.delete(targetId);
-                    fileChannelRef.current.delete(targetId);
                     syncChannelRef.current.delete(targetId);
                 }
             }
@@ -221,10 +194,43 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
         };
 
         pc.ondatachannel = (event) => {
-            const channel = event.channel;
-            if (channel.label.startsWith('sync-channel')) setupSyncReceiver(channel);
-            else if (channel.label.startsWith('file-channel')) setupFileReceiver(channel);
+            const channel = event.channel;  
+
+            channel.onmessage = (e) => {
+                const command = JSON.parse(e.data);
+
+                switch (command.type) {
+                    case 'PLAY':
+                        setIsPlaying(true);
+                        break;
+                    case 'PAUSE':
+                        setIsPlaying(false);
+                        break;
+                    case 'SEEK':
+                        setProgress(command.currentTime);
+                        break;
+                    case 'TRACK_CHANGE':
+                        setSongTitle(command.title);    
+                        break;
+                }
+            }
         };
+
+        if (!isHostRef.current) {
+            pc.ontrack = (event) => {
+                //incoming stream container from host
+                const incomingStream = event.streams[0];
+
+                if (audioRef.current) {
+                    audioRef.current.srcObject = incomingStream;
+
+                    //simulated user interaction so that the player plays on joining 
+                    audioRef.current.play().catch(e => console.error("Playback failed: ", e));
+                }
+
+                console.log(`Caught media stream from host [${targetId}] : ${incomingStream}`)
+            }
+        }
 
         peersRef.current.set(targetId, pc);
         return pc;
@@ -251,37 +257,17 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
 
         const pc = createPeerConnection(guestSocketId);
 
-        // file channel (reliable)
-        const fileChannel = pc.createDataChannel(`file-channel-${guestSocketId}`);
-        fileChannel.onopen = async () => {
-            console.log(`Data channel open with ${guestSocketId}`);
-            if (audioFileRef.current != null) {
-                const arrayBuffer = await audioFileRef.current.arrayBuffer();
-                sendFileOverChannel(fileChannelRef.current.get(guestSocketId), arrayBuffer);
-            }
-        };
-        fileChannelRef.current.set(guestSocketId, fileChannel);
-
         // sync channel (unreliable)
         const syncChannel = pc.createDataChannel(`sync-channel-${guestSocketId}`, {
             ordered: false,
             maxRetransmits: 0,
         });
-        syncChannel.onmessage = (messageEvent) => {
-            if (typeof messageEvent.data === 'string' && messageEvent.data !== 'EOF') {
-                const command = JSON.parse(messageEvent.data);
-
-                if (command.type === 'PING') {
-                    syncChannel.send(JSON.stringify({
-                        type: 'PONG',
-                        clientTime: command.clientTime,
-                        serverTime: Date.now(),
-                    }));
-                    console.log('PONG Sent');
-                }
-            }
-        };
         syncChannelRef.current.set(guestSocketId, syncChannel);
+
+        //attach the media track to the PC
+        const track = liveStreamRef.current?.getAudioTracks()[0];
+        if (track && liveStreamRef.current)
+            pc.addTrack(track, liveStreamRef.current);
 
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -368,17 +354,6 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    useEffect(() => {
-        const syncBroadcast = setInterval(() => {
-            if (isHostRef.current && audioRef.current) {
-                broadcastCommand('SYNC', audioRef.current.currentTime, !audioRef.current.paused);
-            }
-        }, SYNC_BROADCAST_INTERVAL_MS);
-
-        return () => clearInterval(syncBroadcast);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     return {
         roomId,
         setRoomId,
@@ -391,7 +366,6 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
         joinRoom,
         leaveRoom,
         handleFileSelect,
-        sendAudioFile,
         broadcastCommand,
         connectionState
     };

@@ -5,15 +5,13 @@ interface HostControlsProps {
     roomId: string;
     createRoom: () => void;
     onFileSelect: (file: File) => void;
-    sendAudioFile: () => void;
 }
 
 export const HostControls: React.FC<HostControlsProps> = ({
     isHost,
     roomId,
     createRoom,
-    onFileSelect,
-    sendAudioFile
+    onFileSelect
 }) => {
 
     const [copied, setCopied] = useState(false);
@@ -82,12 +80,6 @@ export const HostControls: React.FC<HostControlsProps> = ({
                         }
                     }}
                 />
-            )}
-
-            {isHost && (
-                <button className='send-audiobtn' onClick={sendAudioFile}>
-                    Send Audio
-                </button>
             )}
         </div>
     );

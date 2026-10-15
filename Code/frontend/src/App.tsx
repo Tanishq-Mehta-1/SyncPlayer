@@ -22,7 +22,6 @@ export default function App() {
         joinRoom,
         leaveRoom,
         handleFileSelect,
-        sendAudioFile,
         broadcastCommand,
         connectionState
     } = useWebRTC(audioRef);
@@ -51,7 +50,6 @@ export default function App() {
                     roomId={roomId}
                     createRoom={createRoom}
                     onFileSelect={handleFileSelect}
-                    sendAudioFile={sendAudioFile}
                 />
             )}
 
