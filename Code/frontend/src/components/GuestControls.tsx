@@ -5,15 +5,27 @@ interface GuestControlsProps {
     setRoomId: (id: string) => void;
     joinRoom: () => void;
     hasJoined: boolean;
+    connectionState: string;
 }
 
 export const GuestControls: React.FC<GuestControlsProps> = ({
     roomId,
     setRoomId,
     joinRoom,
-    hasJoined
+    hasJoined,
+    connectionState
 }) => {
-    
+
+    //reconnecting screen
+    if (hasJoined && connectionState === 'reconnecting') {
+        return (
+            <div className='guest-container' style={{ textAlign: 'center', borderColor: 'var(--accent)' }}>
+                <h2 style={{ margin: '0', color: 'var(--accent)' }}>Connection lost!</h2>
+                <p style={{ fontSize: '14px', opacity: 0.7, marginTop: '12px' }}>Reconnecting to the host...</p>
+            </div>
+        )
+    }
+
     // The new success view for connected guests
     if (hasJoined) {
         return (
@@ -34,7 +46,7 @@ export const GuestControls: React.FC<GuestControlsProps> = ({
                 placeholder='Enter Room ID'
                 value={roomId}
                 onKeyDown={(e) => {
-                    if (e.key === 'Enter' && roomId.trim() !== ''){
+                    if (e.key === 'Enter' && roomId.trim() !== '') {
                         joinRoom();
                     }
                 }}

@@ -24,6 +24,7 @@ export default function App() {
         handleFileSelect,
         sendAudioFile,
         broadcastCommand,
+        connectionState
     } = useWebRTC(audioRef);
 
     // flush the old track and load the new track when the url changes
@@ -60,6 +61,7 @@ export default function App() {
                     setRoomId={setRoomId}
                     joinRoom={joinRoom}
                     hasJoined={hasJoined}
+                    connectionState={connectionState}
                 />
             )}
 

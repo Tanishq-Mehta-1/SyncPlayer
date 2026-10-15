@@ -28,6 +28,7 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
     const [isHost, setIsHost] = useState<boolean>(false);
     const [audioURL, setAudioURL] = useState<string | null>(null);
     const [alertMessage, setAlertMessage] = useState<string>('');
+    const [connectionState, setConnectionState] = useState<'idle' | 'connecting' | 'connected' | 'reconnecting'>('idle');
 
     // ---- Room lifecycle ----
     const leaveRoom = useCallback(() => {
@@ -101,6 +102,7 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
     const broadcastCommand = (type: string, time: number, isPlaying?: boolean) => {
         peersRef.current.forEach((_pc, guestId) => {
             const dc = syncChannelRef.current.get(guestId);
+            console.log(`Guest ${guestId}'s data channel: ${dc?.readyState}`);
             if (dc && dc.readyState === 'open') {
                 dc.send(JSON.stringify({
                     type,
@@ -187,7 +189,14 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
         pc.onconnectionstatechange = () => {
             // console.log(`Global Connection State for ${targetId}:`, pc.connectionState);
 
-            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            if (pc.connectionState === 'disconnected' && !isHostRef.current) {
+                console.log('Connection lost. Attempting to recover');
+                setConnectionState('reconnecting');
+            } else if (pc.connectionState === 'connected') {
+                console.log(`Connected to ${targetId}!`);
+                setConnectionState('connected')
+            } else if (pc.connectionState === 'failed') {
+                //permanent connection drop
                 if (!isHostRef.current) {
                     // host dropped the connection, we are guests
                     leaveRoom();
@@ -197,7 +206,6 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
                     peersRef.current.delete(targetId);
                     fileChannelRef.current.delete(targetId);
                     syncChannelRef.current.delete(targetId);
-                    // console.log(`Guest ${targetId} disconnected.`);
                 }
             }
         };
@@ -230,7 +238,7 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
         for (const candidate of queued) {
             try {
                 await pc.addIceCandidate(candidate);
-                console.log('Ice candidated added successfully');
+                console.log('Ice candidate added successfully');
             } catch (error) {
                 console.error('Error adding queued ICE candidate', error);
             }
@@ -319,13 +327,13 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
 
             if (pc.remoteDescription) {
                 await pc.addIceCandidate(iceCandidate);
-                console.log('Ice candidated added successfully');
+                console.log('Ice candidate added successfully');
             } else {
                 if (!pendingCandidatesRef.current.has(data.senderId)) {
                     pendingCandidatesRef.current.set(data.senderId, []);
                 }
                 pendingCandidatesRef.current.get(data.senderId)!.push(iceCandidate);
-                console.log('Ice candidated queued');
+                console.log('Ice candidate queued');
             }
         }
     };
@@ -385,5 +393,6 @@ export function useWebRTC(audioRef: RefObject<HTMLAudioElement | null>) {
         handleFileSelect,
         sendAudioFile,
         broadcastCommand,
+        connectionState
     };
 }
